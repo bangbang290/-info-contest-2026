@@ -127,7 +127,7 @@ def normalize_settings(s: dict) -> dict:
     k = min(len(labels), len(ratio)) or 5
     s["grade_labels"], s["grade_ratio"] = (labels[:k], ratio[:k]) if labels and ratio else (
         ["매우우수", "우수", "보통", "미흡", "매우미흡"], [1.0, 0.8, 0.6, 0.4, 0.2])
-    s["trim_high_low"] = bool(s.get("trim_high_low", True))
+    s["trim_high_low"] = False   # 최고·최저 제외 기능은 쓰지 않습니다(5점 척도)
     s["show_runner_ups"] = bool(s.get("show_runner_ups", False))
     s["guide_note"] = str(s.get("guide_note", "") or "").strip()
     s["guide"] = [{"name": str(g.get("name", "")).strip(), "weight": str(g.get("weight", "") or "").strip(),
@@ -351,8 +351,20 @@ def fmt(x) -> str:
 
 
 # ───────────────────────── 집계
+def top_score(S) -> float:
+    """만점(예: 종합점수 5점)."""
+    return round(sum(c["max"] for c in S["criteria"]), 4)
+
+
+def top_label(S) -> str:
+    """'5점(매우우수)'처럼 만점을 부르는 이름."""
+    lab = S["grade_labels"][0] if S["input_mode"] == "grade" and S["grade_labels"] else "만점"
+    return f"{fmt(top_score(S))}점({lab})"
+
+
 def ranking() -> dict:
-    """팀별 반영 평균(최고·최저 각 1개 제외)과 순위. 동점은 전체 평균으로 가르고, 그래도 같으면 관리자 결정."""
+    """팀별 평균으로 순위를 매깁니다. 평균이 같으면 만점(5점)을 더 많이 받은 팀이 앞서고,
+    그래도 같으면 관리자(심사위원장)가 정합니다."""
     S, st = get_settings(), get_state()
     tok2idx = {r["token"]: r["idx"] for r in _read("SELECT idx, token FROM seats")}
     by_team = {t: [] for t in range(len(S["teams"]))}
@@ -366,20 +378,18 @@ def ranking() -> dict:
     for t, items in by_team.items():
         totals = sorted((x[0] for x in items), reverse=True)
         n = len(totals)
-        trimmed = S["trim_high_low"] and n >= 3
-        kept = totals[1:-1] if trimmed else totals
+        best = top_score(S)
         crit_avg = [round(mean(v[1][k] for v in items), 2) if items else None for k in range(len(S["criteria"]))]
         rows.append({
             "team": t, "name": S["teams"][t]["name"], "dept": S["teams"][t]["dept"], "topic": S["teams"][t]["topic"],
             "order_no": (st["order"].index(t) + 1) if t in st["order"] else None,
             "n": n, "eligible": len(eligible_judges(S, t)), "totals": totals,
-            "dropped_high": totals[0] if trimmed else None, "dropped_low": totals[-1] if trimmed else None,
-            "kept": kept, "score": round(mean(kept), 4) if kept else None,
-            "raw_mean": round(mean(totals), 4) if totals else None, "crit_avg": crit_avg,
+            "score": round(mean(totals), 4) if totals else None,
+            "top_count": sum(1 for x in totals if abs(x - best) < 1e-6), "crit_avg": crit_avg,
         })
 
     def key(r):
-        return (r["score"] is None, -(r["score"] or 0), -(r["raw_mean"] or 0))
+        return (r["score"] is None, -(r["score"] or 0), -r["top_count"])
 
     rows.sort(key=lambda r: (key(r), r["order_no"] or 99, r["team"]))
     rank, prev = 0, None
@@ -559,20 +569,14 @@ def export_excel() -> bytes:
     res = pd.DataFrame([{
         "순위": r["rank"], "팀": r["name"], "소속": r["dept"], "발표 순서": r["order_no"],
         "평가 인원": f'{r["n"]} / {r["eligible"]}',
-        "반영 평균(최고·최저 제외)": r["score"], "전체 평균": r["raw_mean"],
-        "제외된 최고점": r["dropped_high"], "제외된 최저점": r["dropped_low"],
+        "평균": r["score"], f"{top_label(S)} 받은 수": r["top_count"],
         "수상": awards.get(r["team"], ""),
     } for r in R["rows"]])
     long = []
     for r in sorted(R["rows"], key=lambda x: (x["order_no"] or 99)):
-        for i, tot in enumerate(r["totals"]):
-            note = ""
-            if r["dropped_high"] is not None and i == 0:
-                note = "최고점 제외"
-            elif r["dropped_low"] is not None and i == len(r["totals"]) - 1:
-                note = "최저점 제외"
-            long.append({"팀": r["name"], "점수(높은 순)": tot, "비고": note})
-    anon = pd.DataFrame(long or [{"팀": "", "점수(높은 순)": None, "비고": ""}])
+        for tot in r["totals"]:
+            long.append({"팀": r["name"], "받은 점수(높은 순)": tot})
+    anon = pd.DataFrame(long or [{"팀": "", "받은 점수(높은 순)": None}])
     crit = pd.DataFrame([dict({"팀": r["name"]}, **{
         f'{c["name"]} ({fmt(c["max"])}점)': r["crit_avg"][k] for k, c in enumerate(S["criteria"])})
         for r in sorted(R["rows"], key=lambda x: (x["order_no"] or 99))])
@@ -584,9 +588,8 @@ def export_excel() -> bytes:
                                  + " · ".join(f'{c["name"]} {fmt(c["max"])}점' for c in S["criteria"])
                                  + (" — 평가기준: " + ", ".join(f'{g["name"]}({g["weight"]})' for g in S["guide"])
                                     if S["guide"] else "")},
-        {"항목": "집계 기준", "내용": ("팀별로 받은 총점에서 최고점·최저점 각 1개를 제외한 평균"
-                                  if S["trim_high_low"] else "팀별로 받은 총점의 평균")
-                                 + ", 동점이면 전체 평균, 그래도 같으면 심사위원장 결정"},
+        {"항목": "집계 기준", "내용": f"팀별로 받은 점수의 평균 → 평균이 같으면 {top_label(S)}을 더 많이 받은 팀 우선"
+                                 " → 그래도 같으면 심사위원장 결정"},
         {"항목": "최우수", "내용": next((r["name"] for r in R["rows"] if r["team"] == R["winner"]), "미정")},
         {"항목": "익명 처리", "내용": "심사위원별 점수는 기록하지 않고 팀별로 받은 점수만 정리"},
         {"항목": "생성 시각", "내용": time.strftime("%Y-%m-%d %H:%M", time.localtime())},

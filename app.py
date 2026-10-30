@@ -460,7 +460,7 @@ def progress_panel():
             R = core.ranking()
             if R["top_tied"]:
                 names = {t: S["teams"][t]["name"] for t in R["top_tied"]}
-                st.warning("최고 점수가 같은 팀이 있습니다 (전체 평균까지 동일). 심사위원장 결정에 따라 최우수 팀을 골라 주세요.")
+                st.warning(f"평균과 {core.top_label(S)} 받은 수까지 같은 팀이 있습니다. 심사위원장 결정에 따라 최우수 팀을 골라 주세요.")
                 pick = st.radio("최우수 팀", R["top_tied"], format_func=lambda x: names[x], horizontal=True,
                                 index=R["top_tied"].index(R["winner"]) if R["winner"] in R["top_tied"] else None,
                                 key="tie_pick")
@@ -507,8 +507,7 @@ def results_panel():
     df = pd.DataFrame([{
         "순위": r["rank"], "팀": r["name"], "소속": r["dept"], "발표 순서": r["order_no"],
         "평가 인원": f'{r["n"]} / {r["eligible"]}',
-        "반영 평균": r["score"], "전체 평균": r["raw_mean"],
-        "제외 최고점": r["dropped_high"], "제외 최저점": r["dropped_low"],
+        "평균": r["score"], f"{core.top_label(S)} 받은 수": r["top_count"],
         "수상": ("최우수" if r["team"] == R["winner"] else "우수") if r["score"] is not None else "",
     } for r in R["rows"]])
     st.dataframe(df, hide_index=True, use_container_width=True)
@@ -518,8 +517,7 @@ def results_panel():
                        file_name=f"정보분석경진대회_심사결과_{time.strftime('%Y%m%d_%H%M')}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        use_container_width=True)
-    st.caption("집계: 팀별 총점에서 최고·최저 1개씩 제외한 평균 → 같으면 전체 평균 → 그래도 같으면 심사위원장 결정"
-               if S["trim_high_low"] else "집계: 팀별 총점 평균 → 같으면 심사위원장 결정")
+    st.caption(f"집계: 팀별 평균 → 같으면 {core.top_label(S)}을 더 많이 받은 팀 → 그래도 같으면 심사위원장 결정")
 
 
 def proxy_panel():
@@ -664,7 +662,6 @@ def settings_panel():
             "평가기준 (한 줄에 한 지표: 지표명 | 배점 | 내용1 / 내용2 / …)",
             "\n".join(f'{g["name"]} | {g["weight"]} | ' + " / ".join(g["items"]) for g in S["guide"]),
             height=130, help="심사위원 휴대폰의 '평가기준 보기'에 그대로 나옵니다. 점수 계산에는 쓰이지 않습니다.")
-        trim = st.checkbox("최고점·최저점 각 1개 제외하고 평균", S["trim_high_low"])
         runners = st.checkbox("최우수 발표 화면에 우수상 팀도 함께 표시", S["show_runner_ups"])
         rehearsal = st.checkbox("🧪 리허설 모드 (진행 탭에 '남은 심사위원 점수 자동 채우기' 버튼 표시)",
                                 bool(S.get("rehearsal", False)),
@@ -692,7 +689,7 @@ def settings_panel():
                     guide.append({"name": parts[0], "weight": parts[1] if len(parts) > 1 else "",
                                   "items": [x.strip() for x in (parts[2] if len(parts) > 2 else "").split("/") if x.strip()]})
             new = dict(S, guide=guide, guide_note=guide_note, title_top=title_top, title_main=title_main, date_line=date_line, public_url=public_url,
-                       input_mode=mode, trim_high_low=trim, show_runner_ups=runners, rehearsal=rehearsal, admin_pin=pin, judge_code=jcode,
+                       input_mode=mode, trim_high_low=False, show_runner_ups=runners, rehearsal=rehearsal, admin_pin=pin, judge_code=jcode,
                        grade_labels=labels or S["grade_labels"], grade_ratio=ratios or S["grade_ratio"],
                        teams=[{"name": r.get("팀명", ""), "dept": r.get("소속 관실", ""), "topic": r.get("정보분석명", "")}
                               for r in teams.fillna("").to_dict("records") if str(r.get("팀명", "")).strip()],

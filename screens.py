@@ -141,12 +141,14 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .center p{font-size:2rem;color:rgba(214,224,245,.78);margin:1.6rem 0 0}
 .kx .dots3 span{display:inline-block;animation:blink 1.4s infinite both}
 .kx .dots3 span:nth-child(2){animation-delay:.2s}.kx .dots3 span:nth-child(3){animation-delay:.4s}
-.kx .spk{position:absolute;width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);opacity:0;animation:twinkle var(--t) ease-in-out infinite;animation-delay:var(--d)}
-.kx .spk::before{content:"";position:absolute;inset:-40%;border-radius:50%;background:radial-gradient(circle,var(--c) 0%,transparent 60%);opacity:.45}
-.kx .spk::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#fff,var(--c));clip-path:polygon(50% 0,58% 42%,100% 50%,58% 58%,50% 100%,42% 58%,0 50%,42% 42%)}
+.kx .spk{position:absolute;opacity:0;animation-name:twinkle;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-fill-mode:both}
+.kx .spk::before{content:"";position:absolute;inset:-40%;border-radius:50%;background:radial-gradient(circle,currentColor 0%,transparent 60%);opacity:.45}
+.kx .spk::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#fff,currentColor);clip-path:polygon(50% 0,58% 42%,100% 50%,58% 58%,50% 100%,42% 58%,0 50%,42% 42%)}
 .kx .fw{position:absolute;width:0;height:0}
-.kx .fw i{position:absolute;left:0;top:0;width:.55rem;height:.55rem;margin:-.275rem 0 0 -.275rem;border-radius:50%;background:var(--c);box-shadow:0 0 .9rem var(--c);opacity:0;animation:burst var(--t) cubic-bezier(.12,.65,.3,1) infinite;animation-delay:var(--d)}
-.kx .fw b{position:absolute;left:0;top:0;width:2.4rem;height:2.4rem;margin:-1.2rem 0 0 -1.2rem;border-radius:50%;background:radial-gradient(circle,#fff 0%,var(--c) 35%,transparent 70%);opacity:0;animation:flash var(--t) ease-out infinite;animation-delay:var(--d)}
+.kx .fw>i{position:absolute;left:0;top:0;width:0;height:0}
+.kx .fw>i>span{position:absolute;left:-.275rem;top:-.275rem;width:.55rem;height:.55rem;border-radius:50%;opacity:0;animation-name:burst;animation-timing-function:cubic-bezier(.12,.65,.3,1);animation-iteration-count:infinite;animation-fill-mode:both}
+.kx .fw>i>span.far{animation-name:burst2}
+.kx .fw>b{position:absolute;left:-1.2rem;top:-1.2rem;width:2.4rem;height:2.4rem;border-radius:50%;opacity:0;animation-name:flash;animation-timing-function:ease-out;animation-iteration-count:infinite;animation-fill-mode:both}
 .kx .glow{position:absolute;left:50%;top:47%;width:70rem;height:40rem;margin:-20rem 0 0 -35rem;background:radial-gradient(closest-side,rgba(255,196,90,.24),transparent)}
 .kx .award{font-size:2.2rem;font-weight:800;letter-spacing:.55em;padding-left:.55em;background:linear-gradient(90deg,#c8923a,#ffe7a3 50%,#c8923a);-webkit-background-clip:text;background-clip:text;color:transparent}
 .kx .wname{font-size:10rem;font-weight:900;letter-spacing:-.055em;line-height:1.1;margin-top:2rem;max-width:88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 .4rem 3rem rgba(0,0,0,.35)}
@@ -160,9 +162,10 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .enter .wl{animation:winin 1s cubic-bezier(.2,.8,.2,1) both}
 .kx .enter .glow{animation:fadein 1.6s ease-out both}
 .kx .enter .others{animation:fadein 1s ease-out .8s both}
-.kx .cf{position:absolute;top:-3rem;width:.7rem;height:1.25rem;border-radius:.15rem;opacity:0;animation:fall var(--t) cubic-bezier(.3,.2,.6,1) both;animation-delay:var(--d)}
+.kx .cf{position:absolute;top:-3rem;border-radius:.15rem;opacity:0;animation-timing-function:cubic-bezier(.3,.2,.6,1);animation-fill-mode:both;animation-iteration-count:1}
 @keyframes twinkle{0%,100%{opacity:0;transform:scale(.25) rotate(0deg)}45%{opacity:1;transform:scale(1) rotate(45deg)}60%{opacity:.85;transform:scale(.8) rotate(60deg)}}
-@keyframes burst{0%{opacity:0;transform:rotate(var(--a)) translateX(0) scale(1)}6%{opacity:1}65%{opacity:.95}100%{opacity:0;transform:rotate(var(--a)) translateX(var(--r)) translateY(1.2rem) scale(.35)}}
+@keyframes burst{0%{opacity:0;transform:translateX(0) scale(1)}6%{opacity:1}65%{opacity:.95}100%{opacity:0;transform:translateX(7.2rem) scale(.35)}}
+@keyframes burst2{0%{opacity:0;transform:translateX(0) scale(1)}6%{opacity:1}65%{opacity:.95}100%{opacity:0;transform:translateX(9.4rem) scale(.35)}}
 @keyframes flash{0%{opacity:0;transform:scale(.3)}6%{opacity:1;transform:scale(1)}25%{opacity:0;transform:scale(1.6)}100%{opacity:0}}
 @keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
 @keyframes pop{0%{transform:scale(.975);border-color:#5fe0e4;box-shadow:0 0 0 0 rgba(95,224,228,0)}35%{border-color:#5fe0e4;box-shadow:0 0 2.6rem .2rem rgba(95,224,228,.35)}100%{transform:none;box-shadow:0 0 0 0 rgba(95,224,228,0)}}
@@ -177,7 +180,10 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes breathe{0%,100%{opacity:.75;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
 @keyframes winin{from{opacity:0;transform:scale(.86);filter:blur(1rem)}to{opacity:1;transform:none;filter:none}}
-@keyframes fall{0%{opacity:0;transform:translate3d(0,0,0) rotate(0)}6%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate3d(var(--x),64rem,0) rotate(var(--r))}}
+@keyframes fall1{0%{opacity:0;transform:translate3d(0,0,0) rotate(0deg)}6%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate3d(-6rem,64rem,0) rotate(540deg)}}
+@keyframes fall2{0%{opacity:0;transform:translate3d(0,0,0) rotate(0deg)}6%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate3d(5rem,64rem,0) rotate(-720deg)}}
+@keyframes fall3{0%{opacity:0;transform:translate3d(0,0,0) rotate(0deg)}6%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate3d(-2rem,64rem,0) rotate(900deg)}}
+@keyframes fall4{0%{opacity:0;transform:translate3d(0,0,0) rotate(0deg)}6%{opacity:1}85%{opacity:1}100%{opacity:0;transform:translate3d(3rem,64rem,0) rotate(-360deg)}}
 </style>""".replace("FONT", FONT).replace("TREND", _trend_svg())
 
 
@@ -277,27 +283,36 @@ def _done(snap) -> str:
 
 
 def _celebrate(seed: int) -> str:
+    """반짝이는 별과 폭죽. 인라인 스타일에는 일반 속성만 씁니다(Streamlit이 '--' 변수를 걸러내기 때문)."""
+    import math
     rng = random.Random(seed)
     gold = ["#ffe7a3", "#f3d27a", "#ffffff", "#ffd88a"]
     out = []
-    import math
     for _ in range(34):
         a = rng.uniform(0, 2 * math.pi)
         k = rng.uniform(.78, 1.18)
         x, y = 50 + math.cos(a) * 41 * k, 47 + math.sin(a) * 36 * k
         if not (2 < x < 98 and 4 < y < 96):
             continue
-        out.append(f'<i class="spk" style="left:{x:.1f}%;top:{y:.1f}%;--s:{rng.uniform(.9, 2.2):.2f}rem;'
-                   f'--c:{rng.choice(gold)};--t:{rng.uniform(1.8, 3.2):.2f}s;--d:{rng.uniform(0, 3):.2f}s"></i>')
+        sz = rng.uniform(.9, 2.2)
+        out.append(f'<i class="spk" style="left:{x:.1f}%;top:{y:.1f}%;width:{sz:.2f}rem;height:{sz:.2f}rem;'
+                   f'margin:-{sz / 2:.2f}rem 0 0 -{sz / 2:.2f}rem;color:{rng.choice(gold)};'
+                   f'animation-duration:{rng.uniform(1.8, 3.2):.2f}s;animation-delay:{rng.uniform(0, 3):.2f}s"></i>')
     bursts = [(16, 22, ["#ffe7a3", "#f3d27a", "#ffffff"]), (84, 20, ["#5fe0e4", "#ffffff", "#9fc2ff"]),
               (10, 68, ["#9fc2ff", "#4f8bff", "#ffffff"]), (90, 70, ["#ffe7a3", "#ffd88a", "#ffffff"]),
               (30, 10, ["#5fe0e4", "#ffe7a3"]), (70, 9, ["#ffffff", "#f3d27a"])]
     for i, (x, y, cols) in enumerate(bursts):
         t, d = rng.uniform(2.6, 3.4), i * .55 + rng.uniform(0, .3)
+        timing = f"animation-duration:{t:.2f}s;animation-delay:{d:.2f}s"
         n = 18
-        parts = "".join(f'<i style="--a:{j * 360 / n + rng.uniform(-6, 6):.0f}deg;--r:{rng.uniform(6.5, 9.5):.1f}rem;'
-                        f'--c:{rng.choice(cols)};--t:{t:.2f}s;--d:{d:.2f}s"></i>' for j in range(n))
-        out.append(f'<div class="fw" style="left:{x}%;top:{y}%"><b style="--c:{cols[0]};--t:{t:.2f}s;--d:{d:.2f}s"></b>{parts}</div>')
+        parts = []
+        for j in range(n):
+            c = rng.choice(cols)
+            far = " far" if j % 2 else ""
+            parts.append(f'<i style="transform:rotate({j * 360 / n + rng.uniform(-6, 6):.0f}deg)">'
+                         f'<span class="{far.strip()}" style="background:{c};box-shadow:0 0 .9rem {c};{timing}"></span></i>')
+        flash = f"background:radial-gradient(circle,#fff 0%,{cols[0]} 35%,transparent 70%);{timing}"
+        out.append(f'<div class="fw" style="left:{x}%;top:{y}%"><b style="{flash}"></b>{"".join(parts)}</div>')
     return "".join(out)
 
 
@@ -322,9 +337,9 @@ def _reveal(snap) -> str:
         cols = ["#f3d27a", "#ffe7a3", "#4f8bff", "#5fe0e4", "#ffffff", "#c8923a"]
         conf = "".join(
             f'<i class="cf" style="left:{rng.uniform(2, 98):.1f}%;background:{rng.choice(cols)};'
-            f'--d:{0.15 + rng.uniform(0, 2.0):.2f}s;--t:{rng.uniform(3.4, 5.8):.2f}s;'
-            f'--x:{rng.uniform(-8, 8):.1f}rem;--r:{rng.choice([-1, 1]) * rng.randint(240, 900)}deg;'
-            f'width:{rng.uniform(.45, .8):.2f}rem;height:{rng.uniform(.8, 1.4):.2f}rem"></i>' for _ in range(70))
+            f'width:{rng.uniform(.45, .8):.2f}rem;height:{rng.uniform(.8, 1.4):.2f}rem;'
+            f'animation-name:fall{rng.randint(1, 4)};animation-duration:{rng.uniform(3.4, 5.8):.2f}s;'
+            f'animation-delay:{0.15 + rng.uniform(0, 2.0):.2f}s"></i>' for _ in range(70))
     enter = "enter" if e < REVEAL_SUSPENSE + REVEAL_ENTER else ""
     return f'''<div class="{enter}" style="position:absolute;inset:0">
 <div class="glow"></div>{_celebrate(int(st["revealed_at"] * 1000) or 5)}
