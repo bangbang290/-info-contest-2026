@@ -114,6 +114,24 @@ def who(dept: str) -> str:
     return f"{d} 과장님"
 
 
+def autofill(S, team) -> int:
+    """리허설용: 아직 제출하지 않은 심사위원의 점수를 무작위로 채웁니다."""
+    import random
+    rng = random.Random()
+    n = 0
+    for s_ in core.seats():
+        if not core.eligible(S, s_["idx"], team) or core.my_score(s_["token"], team):
+            continue
+        vals = []
+        for c in S["criteria"]:
+            opts = grade_options(S, c)
+            weights = [.3, .4, .2, .07, .03][:len(opts)] if len(opts) <= 5 else None
+            vals.append(rng.choices(opts, weights=weights)[0])
+        core.submit(s_["token"], team, vals, proxy=True)
+        n += 1
+    return n
+
+
 def grade_options(S, crit):
     return [round(crit["max"] * r, 4) for r in S["grade_ratio"]]
 
@@ -362,6 +380,8 @@ def admin_view():
     url = base_url()
     if is_local(url):
         st.warning("휴대폰이 접속할 주소를 아직 알 수 없습니다. [설정] 탭의 '접속 주소'에 실제 주소를 넣어 주세요.")
+    if S.get("rehearsal"):
+        st.error("🧪 리허설 모드가 켜져 있습니다. 행사 전에 [설정] 탭에서 끄고, [데이터] 탭에서 '점수·진행 초기화'를 눌러 주세요.")
     if not judge_code():
         st.warning("심사위원 확인 코드가 설정되지 않았습니다. 스크린의 QR을 찍은 누구나 심사위원으로 들어올 수 있으니 "
                    "[설정] 탭이나 Secrets에서 코드를 정해 주세요.")
@@ -458,6 +478,12 @@ def progress_panel():
                 if st.button("발표 장면 다시 재생", use_container_width=True, key="replay"):
                     if act(core.reveal):
                         st.rerun(scope="fragment")
+        if ph == "running" and S.get("rehearsal"):
+            st.write("")
+            if st.button("🧪 남은 심사위원 점수 자동 채우기 (리허설용)", use_container_width=True, key=f"autofill_{snap['cur']}"):
+                k = autofill(S, snap["cur"])
+                st.toast(f"{k}명 점수를 자동으로 채웠습니다")
+                st.rerun(scope="fragment")
         if ph != "lobby":
             st.write("")
             if confirm_button("◀ 한 단계 되돌리기", "back", "직전 단계로 돌아갑니다. 마감한 팀은 다시 입력할 수 있게 열립니다."):
@@ -563,6 +589,8 @@ def links_panel():
                f'border-radius:14px"><img src="{u}" style="width:150px;background:#fff;border-radius:8px;padding:6px">'
                f'<div style="margin-top:6px;font-weight:700">{screens.esc(who(s["dept"]))}</div>'
                f'<div style="font-size:.8rem;color:#8ea3cf">{screens.esc(S["title_main"])} 심사</div></div>')
+            with st.expander("링크 주소 보기"):
+                st.code(f"{url}/?j={s['token']}", language=None)
 
 
 def settings_panel():
@@ -596,6 +624,9 @@ def settings_panel():
             height=130, help="심사위원 휴대폰의 '평가기준 보기'에 그대로 나옵니다. 점수 계산에는 쓰이지 않습니다.")
         trim = st.checkbox("최고점·최저점 각 1개 제외하고 평균", S["trim_high_low"])
         runners = st.checkbox("최우수 발표 화면에 우수상 팀도 함께 표시", S["show_runner_ups"])
+        rehearsal = st.checkbox("🧪 리허설 모드 (진행 탭에 '남은 심사위원 점수 자동 채우기' 버튼 표시)",
+                                bool(S.get("rehearsal", False)),
+                                help="휴대폰 9대 없이 혼자 시험할 때 씁니다. 행사 당일에는 반드시 끄세요.")
         c5, c6 = st.columns(2)
         pin = c5.text_input("관리자 PIN", S["admin_pin"],
                             help="Streamlit Secrets에 admin_pin을 넣으면 그 값이 우선합니다.")
@@ -619,7 +650,7 @@ def settings_panel():
                     guide.append({"name": parts[0], "weight": parts[1] if len(parts) > 1 else "",
                                   "items": [x.strip() for x in (parts[2] if len(parts) > 2 else "").split("/") if x.strip()]})
             new = dict(S, guide=guide, guide_note=guide_note, title_top=title_top, title_main=title_main, date_line=date_line, public_url=public_url,
-                       input_mode=mode, trim_high_low=trim, show_runner_ups=runners, admin_pin=pin, judge_code=jcode,
+                       input_mode=mode, trim_high_low=trim, show_runner_ups=runners, rehearsal=rehearsal, admin_pin=pin, judge_code=jcode,
                        grade_labels=labels or S["grade_labels"], grade_ratio=ratios or S["grade_ratio"],
                        teams=[{"name": r.get("팀명", ""), "dept": r.get("소속 관실", ""), "topic": r.get("정보분석명", "")}
                               for r in teams.fillna("").to_dict("records") if str(r.get("팀명", "")).strip()],
