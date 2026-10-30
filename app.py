@@ -12,8 +12,11 @@ import time
 import pandas as pd
 import streamlit as st
 
+import streamlit.components.v1 as components
+
 import core
 import screens
+import sound
 
 st.set_page_config(page_title="정보분석 경진대회 심사", page_icon="📊", layout="wide",
                    initial_sidebar_state="collapsed")
@@ -146,6 +149,7 @@ def grade_label(S, crit, v):
 # ───────────────────────── 스크린
 def screen_view():
     md(screens.SCREEN_CSS)
+    components.html(sound.component_html(), height=0)
 
     @st.fragment(run_every=1)
     def live():
@@ -494,6 +498,13 @@ def progress_panel():
     url = base_url()
     if url:
         st.link_button("스크린 화면 열기 (새 창 → 프로젝터로)", f"{url}/?view=screen", use_container_width=True)
+    S = core.get_settings()
+    on = S.get("sound", True)
+    st.caption(f"스크린 소리: {'켜짐' if on else '꺼짐'} · 음량 {S.get('volume', 70)} "
+               "(스크린 화면을 한 번 클릭해야 소리가 나기 시작합니다. 스크린 키보드의 M 키로도 끄고 켤 수 있어요)")
+    if st.button("🔇 스크린 소리 끄기" if on else "🔊 스크린 소리 켜기", use_container_width=True, key="snd_toggle"):
+        core.save_settings(dict(S, sound=not on))
+        st.rerun()
 
 
 def results_panel():
@@ -663,6 +674,10 @@ def settings_panel():
             "\n".join(f'{g["name"]} | {g["weight"]} | ' + " / ".join(g["items"]) for g in S["guide"]),
             height=130, help="심사위원 휴대폰의 '평가기준 보기'에 그대로 나옵니다. 점수 계산에는 쓰이지 않습니다.")
         runners = st.checkbox("최우수 발표 화면에 우수상 팀도 함께 표시", S["show_runner_ups"])
+        c7, c8 = st.columns([1, 2])
+        snd = c7.checkbox("🔊 스크린 효과음·음악", S.get("sound", True),
+                          help="스크린 화면에서 장면마다 음악과 효과음이 나옵니다. 발표 중에는 소리가 나지 않습니다.")
+        vol = c8.slider("음량", 0, 100, int(S.get("volume", 70)), step=5)
         rehearsal = st.checkbox("🧪 리허설 모드 (진행 탭에 '남은 심사위원 점수 자동 채우기' 버튼 표시)",
                                 bool(S.get("rehearsal", False)),
                                 help="휴대폰 9대 없이 혼자 시험할 때 씁니다. 행사 당일에는 반드시 끄세요.")
@@ -689,7 +704,7 @@ def settings_panel():
                     guide.append({"name": parts[0], "weight": parts[1] if len(parts) > 1 else "",
                                   "items": [x.strip() for x in (parts[2] if len(parts) > 2 else "").split("/") if x.strip()]})
             new = dict(S, guide=guide, guide_note=guide_note, title_top=title_top, title_main=title_main, date_line=date_line, public_url=public_url,
-                       input_mode=mode, trim_high_low=False, show_runner_ups=runners, rehearsal=rehearsal, admin_pin=pin, judge_code=jcode,
+                       input_mode=mode, trim_high_low=False, show_runner_ups=runners, rehearsal=rehearsal, sound=snd, volume=vol, admin_pin=pin, judge_code=jcode,
                        grade_labels=labels or S["grade_labels"], grade_ratio=ratios or S["grade_ratio"],
                        teams=[{"name": r.get("팀명", ""), "dept": r.get("소속 관실", ""), "topic": r.get("정보분석명", "")}
                               for r in teams.fillna("").to_dict("records") if str(r.get("팀명", "")).strip()],

@@ -129,6 +129,8 @@ def normalize_settings(s: dict) -> dict:
         ["매우우수", "우수", "보통", "미흡", "매우미흡"], [1.0, 0.8, 0.6, 0.4, 0.2])
     s["trim_high_low"] = False   # 최고·최저 제외 기능은 쓰지 않습니다(5점 척도)
     s["show_runner_ups"] = bool(s.get("show_runner_ups", False))
+    s["sound"] = bool(s.get("sound", True))
+    s["volume"] = int(max(0, min(100, _num(s.get("volume"), 70))))
     s["guide_note"] = str(s.get("guide_note", "") or "").strip()
     s["guide"] = [{"name": str(g.get("name", "")).strip(), "weight": str(g.get("weight", "") or "").strip(),
                    "items": [str(x).strip() for x in (g.get("items") or []) if str(x).strip()]}

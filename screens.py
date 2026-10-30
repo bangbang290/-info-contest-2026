@@ -347,6 +347,32 @@ def _reveal(snap) -> str:
 {f'<div class="wmeta">{meta}</div>' if meta else ""}<div class="congrats">축하합니다</div></div>{others}{conf}</div>'''
 
 
+def _sound_marker(snap) -> str:
+    """소리 엔진(sound.py)이 읽는 숨은 표시: 장면|기준값|a|b|경과초|소리켜짐|음량"""
+    S, st = snap["S"], snap["st"]
+    ph, now = st["phase"], snap["now"]
+    if ph == "order":
+        e = now - st["drawn_at"]
+        n = len(st["order"])
+        shown = sum(1 for i in range(n) if e >= DRAW_FIRST + DRAW_STEP * i)
+        parts = ["order", f'{st["drawn_at"]:.3f}', shown, n, f"{e:.1f}"]
+    elif ph == "running" and snap["cur"] is not None:
+        if st["step"] == "scoring":
+            sub = snap["sub"] or {"submitted": 0, "eligible": 0}
+            parts = ["scoring", st["cur"], sub["submitted"], sub["eligible"], 0]
+        else:
+            parts = ["present", st["cur"], 0, 0, 0]
+    elif ph == "reveal" and snap["winner"] is not None:
+        e = now - st["revealed_at"]
+        parts = ["reveal", f'{st["revealed_at"]:.3f}', "sus" if e < REVEAL_SUSPENSE else "win", 0, f"{e:.1f}"]
+    elif ph in ("done", "reveal"):
+        parts = ["done", 0, 0, 0, 0]
+    else:
+        parts = ["lobby", 0, 0, 0, 0]
+    parts += [1 if S.get("sound", True) else 0, int(S.get("volume", 70))]
+    return f'<i class="kx-sc" title="{"|".join(str(x) for x in parts)}" style="display:none"></i>'
+
+
 def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
     st = snap["st"]
     ph, now = st["phase"], snap["now"]
@@ -360,4 +386,4 @@ def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
         body = _reveal(snap)
     else:
         body = _lobby(snap, judge_url, local_warn)
-    return _one(f'<div class="kx"><div class="bg"></div>{body}</div>')
+    return _one(f'<div class="kx"><div class="bg"></div>{body}{_sound_marker(snap)}</div>')
