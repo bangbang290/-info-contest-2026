@@ -103,6 +103,17 @@ def judge_url() -> str:
     return f"{b}/" if b else ""
 
 
+def who(dept: str) -> str:
+    """심사위원 호칭. '심사2국장님'처럼 이미 '님'으로 끝나면 그대로,
+    '심사2국장'처럼 '장'으로 끝나면 '님'만, 나머지(관실 이름)는 '과장님'을 붙입니다."""
+    d = str(dept or "").strip()
+    if d.endswith("님"):
+        return d
+    if d.endswith("장"):
+        return d + "님"
+    return f"{d} 과장님"
+
+
 def grade_options(S, crit):
     return [round(crit["max"] * r, 4) for r in S["grade_ratio"]]
 
@@ -162,7 +173,7 @@ def seat_picker():
     seats = core.seats()
     if pending is not None and pending < len(seats):
         s = seats[pending]
-        md(f'<div class="jx jx-card"><div class="jx-msg"><b>{screens.esc(s["dept"])} 과장님</b>으로 접속합니다.<br>맞으시면 아래 버튼을 눌러 주세요.</div></div>')
+        md(f'<div class="jx jx-card"><div class="jx-msg"><b>{screens.esc(who(s["dept"]))}</b>으로 접속합니다.<br>맞으시면 아래 버튼을 눌러 주세요.</div></div>')
         if s["online"]:
             st.warning("이 자리는 다른 휴대폰에서 이미 접속 중입니다. 본인이 맞을 때만 계속해 주세요.")
         code = judge_code()
@@ -185,7 +196,7 @@ def seat_picker():
     md('<div class="jx jx-msg" style="margin-bottom:.8rem">본인 <b>소속 관실</b>을 눌러 주세요.<br>'
        '<span style="color:#8ea3cf;font-size:.95rem">한 번만 선택하면 이 휴대폰에서 계속 유지됩니다.</span></div>')
     for s in seats:
-        label = f'{s["dept"]} 과장님' + ("  · 접속 중" if s["online"] else "")
+        label = who(s["dept"]) + ("  · 접속 중" if s["online"] else "")
         if st.button(label, key=f"seat_{s['idx']}", use_container_width=True):
             st.session_state["pick"] = s["idx"]
             st.rerun()
@@ -206,7 +217,7 @@ def judge_view():
         core.touch(judge["token"])
         S, stt = core.get_settings(), core.get_state()
         md(f'<div class="jx jx-head"><small>{screens.esc(S["title_top"])} {screens.esc(S["title_main"])}</small>'
-           f'<b>심사위원 화면</b><span class="jx-who">{screens.esc(judge["dept"])} 과장님</span></div>')
+           f'<b>심사위원 화면</b><span class="jx-who">{screens.esc(who(judge["dept"]))}</span></div>')
         ph = stt["phase"]
         order_html = ""
         if stt["order"]:
@@ -489,7 +500,7 @@ def proxy_panel():
     st.caption("휴대폰 입력이 어려운 분의 종이 심의표를 대신 입력할 때 씁니다. 마감된 팀도 입력할 수 있습니다.")
     S = core.get_settings()
     seats = core.seats()
-    j = st.selectbox("심사위원", [s["idx"] for s in seats], format_func=lambda i: f'{seats[i]["dept"]} 과장', key="px_j")
+    j = st.selectbox("심사위원", [s["idx"] for s in seats], format_func=lambda i: who(seats[i]["dept"]), key="px_j")
     teams = [t for t in range(len(S["teams"])) if core.eligible(S, j, t)]
     t = st.selectbox("팀", teams, format_func=lambda x: S["teams"][x]["name"], key="px_t")
     if t is None:
@@ -543,14 +554,14 @@ def links_panel():
     st.markdown(f"**심사위원 확인 코드:** `{code}` — 심사 자료에만 적어 두세요." if code else
                 "**심사위원 확인 코드:** 없음 ([설정] 탭에서 정해 주세요)")
     st.markdown("**개인별 QR (선택)** — 관실 선택과 코드 입력 없이 바로 들어가는 QR입니다. "
-                "인쇄해서 해당 과장님 자리에만 두세요(Ctrl+P). 다른 사람이 찍으면 그분 자리로 들어가니 공개하면 안 됩니다.")
+                "인쇄해서 해당 심사위원 자리에만 두세요(Ctrl+P). 다른 사람이 찍으면 그분 자리로 들어가니 공개하면 안 됩니다.")
     cols = st.columns(3)
     for i, s in enumerate(core.seats()):
         with cols[i % 3]:
             u = screens.qr_data_uri(f"{url}/?j={s['token']}")
             md(f'<div style="text-align:center;padding:12px;margin-bottom:12px;border:1px solid rgba(255,255,255,.12);'
                f'border-radius:14px"><img src="{u}" style="width:150px;background:#fff;border-radius:8px;padding:6px">'
-               f'<div style="margin-top:6px;font-weight:700">{screens.esc(s["dept"])} 과장님</div>'
+               f'<div style="margin-top:6px;font-weight:700">{screens.esc(who(s["dept"]))}</div>'
                f'<div style="font-size:.8rem;color:#8ea3cf">{screens.esc(S["title_main"])} 심사</div></div>')
 
 
@@ -651,7 +662,7 @@ def data_panel():
     st.markdown("**심사위원 접속 해제** — 엉뚱한 관실을 선택했을 때")
     for s in core.seats():
         c1, c2 = st.columns([3, 1])
-        c1.write(f'{s["dept"]} 과장 — {"접속 중" if s["online"] else ("접속했었음" if s["claimed"] else "미접속")}')
+        c1.write(f'{who(s["dept"])} — {"접속 중" if s["online"] else ("접속했었음" if s["claimed"] else "미접속")}')
         if s["claimed"] and c2.button("해제", key=f"rel_{s['idx']}"):
             core.release_seat(s["idx"])
             st.rerun()
