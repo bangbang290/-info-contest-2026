@@ -557,6 +557,43 @@ def proxy_panel():
         st.rerun()
 
 
+def qr_cards_html(url: str, S: dict) -> str:
+    """인쇄용 개인 QR 카드(A4 한 장에 2장, 흰 바탕). 브라우저에서 열어 Ctrl+P로 인쇄합니다."""
+    import segno
+    cards = []
+    for s_ in core.seats():
+        link = f"{url}/?j={s_['token']}"
+        qr = segno.make(link, error="m").svg_data_uri(scale=8, border=2, dark="#000000", light="#ffffff")
+        name = screens.esc(who(s_["dept"]))
+        cards.append(f'''<section class="card">
+<div class="ev">{screens.esc(S["title_top"])} {screens.esc(S["title_main"])} · 심사위원 전용</div>
+<div class="nm">{name}</div>
+<img class="qr" src="{qr}" alt="QR">
+<ol><li>휴대폰 <b>카메라</b>를 켜고 QR 코드를 비춥니다.</li>
+<li>화면에 뜨는 <b>주소(링크)</b>를 누릅니다.</li>
+<li>발표가 시작되면 <b>평가 화면이 자동으로</b> 나타납니다.</li></ol>
+<div class="ft">이 QR은 <b>{name}</b> 전용입니다. 다른 분과 바꿔 쓰지 마세요.</div>
+</section>''')
+    return f'''<!doctype html><html lang="ko"><head><meta charset="utf-8"><title>심사위원 개인 QR 카드</title>
+<style>
+@page{{size:A4;margin:12mm}}
+body{{margin:0;font-family:"Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;color:#111;background:#fff}}
+.tip{{padding:10px 14px;margin:0 0 10px;background:#eef3ff;border:1px solid #c9d6f5;border-radius:8px;font-size:14px}}
+@media print{{.tip{{display:none}}}}
+.card{{height:128mm;box-sizing:border-box;border:1.5px dashed #9aa4b8;border-radius:6mm;padding:9mm 12mm;margin:0 0 8mm;
+display:grid;grid-template-columns:1fr 62mm;grid-template-rows:auto auto 1fr auto;column-gap:10mm;break-inside:avoid;page-break-inside:avoid}}
+.card:nth-of-type(2n){{break-after:page;page-break-after:always}}
+.ev{{grid-column:1/3;font-size:13pt;color:#3b4a6b;font-weight:700}}
+.nm{{grid-column:1/2;font-size:30pt;font-weight:800;margin-top:6mm;letter-spacing:-.5px}}
+.qr{{grid-column:2/3;grid-row:2/4;width:62mm;height:62mm;align-self:center}}
+ol{{grid-column:1/2;margin:6mm 0 0;padding-left:6mm;font-size:14pt;line-height:1.75;word-break:keep-all}}
+.ft{{grid-column:1/3;font-size:11.5pt;color:#555;border-top:1px solid #dde3ee;padding-top:3mm;margin-top:4mm}}
+</style></head><body>
+<div class="tip">이 파일을 연 상태에서 <b>Ctrl + P</b>를 눌러 인쇄하세요. 한 장에 두 분씩 나오고, 점선을 따라 자르면 됩니다. (이 안내 문구는 인쇄되지 않습니다)</div>
+{"".join(cards)}
+</body></html>'''
+
+
 def links_panel():
     url = base_url()
     S = core.get_settings()
@@ -565,7 +602,7 @@ def links_panel():
         return
     c1, c2 = st.columns(2)
     with c1:
-        st.markdown("**심사위원 공통 QR** — 스크린에도 같은 QR이 나옵니다")
+        st.markdown("**심사위원 공통 주소** — 개인 QR을 잃어버린 분은 이 QR로 들어와 관실을 고르고 확인 코드를 입력하면 됩니다")
         st.code(f"{url}/", language=None)
         uri = screens.qr_data_uri(f"{url}/")
         if uri:
@@ -579,8 +616,13 @@ def links_panel():
     code = judge_code()
     st.markdown(f"**심사위원 확인 코드:** `{code}` — 심사 자료에만 적어 두세요." if code else
                 "**심사위원 확인 코드:** 없음 ([설정] 탭에서 정해 주세요)")
-    st.markdown("**개인별 QR (선택)** — 관실 선택과 코드 입력 없이 바로 들어가는 QR입니다. "
-                "인쇄해서 해당 심사위원 자리에만 두세요(Ctrl+P). 다른 사람이 찍으면 그분 자리로 들어가니 공개하면 안 됩니다.")
+    st.markdown("**개인별 QR** — 관실 선택과 코드 입력 없이 바로 들어가는 QR입니다. "
+                "해당 심사위원 자리에만 두세요. 다른 사람이 찍으면 그분 자리로 들어가니 공개하면 안 됩니다.")
+    st.download_button("🖨 인쇄용 개인 QR 카드 내려받기 (흰 바탕 · A4 한 장에 2명)",
+                       qr_cards_html(url, S).encode("utf-8"), file_name="심사위원_개인QR카드.html", mime="text/html",
+                       use_container_width=True, type="primary")
+    st.caption("받은 파일을 열고 Ctrl+P로 인쇄하세요. ⚠️ 인쇄한 뒤에는 [데이터] 탭의 '심사위원 접속 정보 새로 발급'을 누르지 마세요. "
+               "카드의 QR이 모두 바뀝니다. 서버가 다시 켜졌을 때도 백업으로 되살리면 카드 QR이 그대로 다시 작동합니다.")
     cols = st.columns(3)
     for i, s in enumerate(core.seats()):
         with cols[i % 3]:

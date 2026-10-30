@@ -80,7 +80,7 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .chip.now{border-color:#4f8bff;color:#fff;background:rgba(79,139,255,.18)}
 .kx .chip.now em{background:#4f8bff;color:#fff}
 .kx .lobby{position:absolute;inset:0;display:flex;align-items:center;justify-content:space-between;padding:0 7rem;gap:4rem}
-.kx .t1{font-weight:300;font-size:4.6rem;color:rgba(214,224,245,.74);letter-spacing:-.035em;line-height:1.1}
+.kx .t1{font-weight:300;font-size:5.2rem;color:rgba(214,224,245,.74);letter-spacing:-.035em;line-height:1.1}
 .kx .t2{font-weight:900;font-size:7rem;letter-spacing:-.045em;line-height:1.1;margin-top:.5rem;text-shadow:0 0 3rem #070d20}
 .kx .rule{width:5.4rem;height:.28rem;border-radius:.2rem;background:linear-gradient(90deg,#4f8bff,#5fe0e4);margin:3.2rem 0 2.4rem}
 .kx .date{font-size:2.3rem;font-weight:700}
@@ -91,6 +91,8 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .qcap b{display:block;font-size:1.75rem;font-weight:800;letter-spacing:-.03em}
 .kx .qcap span{display:block;font-size:1.05rem;color:#52607d;margin-top:.35rem}
 .kx .conn{margin-top:1.8rem;display:flex;align-items:center;gap:1.1rem;font-size:1.45rem;color:rgba(214,224,245,.8)}
+.kx .conn.lob{position:absolute;right:7rem;bottom:4.6rem;margin:0;font-size:1.25rem;color:rgba(214,224,245,.6)}
+.kx .conn.lob b{font-size:1.6rem}
 .kx .conn b{color:#fff;font-size:1.9rem}
 .kx .pips{display:flex;gap:.45rem}
 .kx .pip{width:.85rem;height:.85rem;border-radius:50%;background:rgba(255,255,255,.18)}
@@ -214,19 +216,12 @@ def _top(snap, chips=True) -> str:
 
 def _lobby(snap, judge_url, local_warn) -> str:
     S = snap["S"]
-    qr = qr_data_uri(judge_url)
     pips = "".join(f'<div class="pip{" on" if s["online"] else ""}"></div>' for s in snap["seats"])
-    qr_html = (f'<img src="{qr}" alt="심사위원 접속 QR">' if qr else
-               '<div style="color:#0c1730;padding:3rem 1rem;text-align:center;font-size:1.2rem">관리 화면의 설정에서<br>접속 주소를 입력해 주세요</div>')
-    warn = (f'<div class="warn">QR 주소가 {esc(judge_url)} 입니다. 휴대폰에서 열리지 않는 주소면 관리 화면 설정에서 접속 주소를 입력해 주세요.</div>'
-            if local_warn else "")
     return f'''
-<div class="lobby">
-<div><div class="t1">{esc(S["title_top"])}</div><div class="t2">{esc(S["title_main"])}</div>
-<div class="rule"></div><div class="date">{esc(S["date_line"])}</div></div>
-<div class="qrbox"><div class="qrcard">{qr_html}<div class="qcap"><b>심사위원 접속</b><span>휴대폰 카메라로 QR 코드를 비춰 주세요</span></div></div>
-<div class="conn"><div class="pips">{pips}</div><div>접속 <b>{snap["online"]}</b> / {snap["judges"]}</div></div></div>
-</div>{warn}'''
+<div class="lobby"><div>
+<div class="t1">{esc(S["title_top"])}</div><div class="t2" style="{fit(S["title_main"], 8.6, 84)}">{esc(S["title_main"])}</div>
+<div class="rule"></div><div class="date">{esc(S["date_line"])}</div></div></div>
+<div class="conn lob"><span>심사위원 접속</span><div class="pips">{pips}</div><div><b>{snap["online"]}</b> / {snap["judges"]}</div></div>'''
 
 
 def _order(snap) -> str:
@@ -269,13 +264,10 @@ def _running(snap, judge_url) -> str:
                 f'<div class="bar"><i class="{"full" if full else ""}" style="width:{pct:.1f}%"></i></div>')
     else:
         stat = '<div class="live"><i></i>발표 중</div>'
-    qr = qr_data_uri(judge_url)
-    mini = (f'<div class="mini"><div><b>심사 접속</b>화면이 꺼졌다면<br>다시 찍어 주세요</div><img src="{qr}" alt=""></div>'
-            if qr else "")
     return f'''{_top(snap)}
 <div class="run"><div class="eyebrow">발표 {st["cur"] + 1} / {len(st["order"])}</div>
 <div class="team" style="{fit(team["name"], 8.6, 84)}">{esc(team["name"])}</div>{f'<div class="meta">{meta}</div>' if meta else ""}</div>
-<div class="stat">{stat}</div>{mini}'''
+<div class="stat">{stat}</div>'''
 
 
 def _done(snap) -> str:
