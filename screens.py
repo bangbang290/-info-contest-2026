@@ -66,8 +66,9 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .top{position:absolute;left:7rem;right:7rem;top:3.6rem;display:flex;justify-content:space-between;align-items:center;gap:2rem}
 .kx .brand{font-size:1.3rem;font-weight:600;color:rgba(214,224,245,.78);display:flex;align-items:center;gap:.8rem;white-space:nowrap}
 .kx .brand i{width:.7rem;height:.7rem;border-radius:.15rem;background:linear-gradient(135deg,#4f8bff,#5fe0e4)}
-.kx .chips{display:flex;gap:.6rem;flex-wrap:nowrap;overflow:hidden}
-.kx .chip{display:flex;align-items:center;gap:.55rem;padding:.5rem 1.1rem .5rem .55rem;border-radius:99rem;border:1px solid rgba(255,255,255,.14);font-size:1.1rem;color:rgba(214,224,245,.55);white-space:nowrap;max-width:15rem;overflow:hidden;text-overflow:ellipsis}
+.kx .brand{flex:none}
+.kx .chips{display:flex;gap:.6rem;flex-wrap:nowrap;overflow:hidden;min-width:0;flex:1;justify-content:flex-end}
+.kx .chip{flex:0 1 auto;min-width:0;display:flex;align-items:center;gap:.55rem;padding:.5rem 1.1rem .5rem .55rem;border-radius:99rem;border:1px solid rgba(255,255,255,.14);font-size:1.1rem;color:rgba(214,224,245,.55);white-space:nowrap;max-width:15rem;overflow:hidden;text-overflow:ellipsis}
 .kx .chip em{font-style:normal;flex:none;width:1.7rem;height:1.7rem;border-radius:50%;display:grid;place-items:center;font-size:.9rem;font-weight:700;background:rgba(255,255,255,.08)}
 .kx .chip.done{color:rgba(214,224,245,.85)}
 .kx .chip.done em{background:rgba(95,224,228,.18);color:#5fe0e4}
@@ -158,6 +159,22 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 </style>""".replace("FONT", FONT).replace("TREND", _trend_svg())
 
 
+def fit(text: str, base: float, avail: float) -> str:
+    """글자 수에 맞춰 큰 제목 크기를 줄여 한 줄에 들어가게 합니다(rem 단위)."""
+    w = 0.0
+    for ch in str(text or ""):
+        if "\uac00" <= ch <= "\ud7a3":
+            w += 0.92
+        elif ch == " ":
+            w += 0.3
+        elif ch.isascii():
+            w += 0.6
+        else:
+            w += 0.8
+    size = base if w <= 0 else min(base, avail / w)
+    return f"font-size:{size:.2f}rem"
+
+
 def _one(s: str) -> str:
     """st.markdown이 HTML을 그대로 쓰도록 한 줄로 만듭니다(빈 줄·들여쓰기 제거)."""
     return " ".join(line.strip() for line in s.splitlines() if line.strip())
@@ -233,7 +250,7 @@ def _running(snap, judge_url) -> str:
             if qr else "")
     return f'''{_top(snap)}
 <div class="run"><div class="eyebrow">발표 {st["cur"] + 1} / {len(st["order"])}</div>
-<div class="team">{esc(team["name"])}</div>{f'<div class="meta">{meta}</div>' if meta else ""}</div>
+<div class="team" style="{fit(team["name"], 8.6, 84)}">{esc(team["name"])}</div>{f'<div class="meta">{meta}</div>' if meta else ""}</div>
 <div class="stat">{stat}</div>{mini}'''
 
 
@@ -269,7 +286,7 @@ def _reveal(snap, animate) -> str:
         conf = "".join(pieces)
     return f'''<div class="{"anim" if animate else ""}" style="position:absolute;inset:0">
 <div class="glow"></div><div class="rays"></div>{sus}
-<div class="center wl"><div class="award">최우수상</div><div class="wname">{esc(team["name"])}</div>
+<div class="center wl"><div class="award">최우수상</div><div class="wname" style="{fit(team["name"], 10, 82)}">{esc(team["name"])}</div>
 {f'<div class="wmeta">{meta}</div>' if meta else ""}<div class="congrats">축하합니다</div></div>{others}{conf}</div>'''
 
 
