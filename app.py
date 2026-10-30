@@ -147,7 +147,7 @@ def grade_label(S, crit, v):
 def screen_view():
     md(screens.SCREEN_CSS)
 
-    @st.fragment(run_every=2)
+    @st.fragment(run_every=1)
     def live():
         snap = core.snapshot()
         url = judge_url()

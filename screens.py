@@ -11,8 +11,13 @@ from urllib.parse import quote
 
 from core import fmt
 
-DRAW_ANIM_SEC = 20      # 추첨 후 이 시간 동안만 애니메이션, 이후엔 정지 화면
-REVEAL_ANIM_SEC = 30
+# 연출 타이밍(초). 화면은 서버 시계 기준으로 그려서, 새로고침되어도 순서가 꼬이지 않습니다.
+DRAW_FIRST = 1.5        # 추첨 후 첫 팀이 공개되는 시점
+DRAW_STEP = 2.0         # 다음 팀까지 간격
+POP_SEC = 1.0           # 공개 직후 강조 효과 시간
+REVEAL_SUSPENSE = 3.6   # '최우수상 발표합니다' 대기 시간
+REVEAL_ENTER = 1.0      # 팀명 등장 효과 시간
+CONFETTI_SEC = 9.0      # 꽃가루를 보여 주는 시간
 
 
 def esc(s) -> str:
@@ -98,14 +103,18 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .row{display:flex;align-items:center;gap:2.2rem;height:6.4rem;padding:0 2.6rem 0 1.1rem;border-radius:1.2rem;background:linear-gradient(90deg,rgba(255,255,255,.09),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.13);position:relative;overflow:hidden}
 .kx .row .no{flex:none;width:3.6rem;height:3.6rem;border-radius:50%;display:grid;place-items:center;font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#4f8bff,#5fe0e4);color:#fff}
 .kx .row .mid{flex:1;min-width:0}
-.kx .row .win{height:3.5rem;overflow:hidden}
+.kx .row .nm{font-size:2.7rem;font-weight:800;line-height:3.5rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.04em}
 .kx .row .tp{font-size:1.45rem;font-weight:500;color:rgba(214,224,245,.78);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.02em}
-.kx .strip div{height:3.5rem;line-height:3.5rem;font-size:2.7rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.04em}
 .kx .row .dp{flex:none;font-size:1.6rem;color:rgba(214,224,245,.72);max-width:24rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.kx .anim .row{animation:cardin .6s ease-out both;animation-delay:calc(var(--d) - .5s)}
-.kx .anim .strip{animation:roll 2.2s cubic-bezier(.15,.72,.2,1) both;animation-delay:var(--d)}
-.kx .anim .row::after{content:"";position:absolute;inset:0;border-radius:inherit;border:2px solid #5fe0e4;opacity:0;animation:land 1.4s ease-out both;animation-delay:calc(var(--d) + 2.05s)}
-.kx .anim .dp,.kx .anim .tp{animation:fadein .6s ease-out both;animation-delay:calc(var(--d) + 2.1s)}
+.kx .row.wait{background:rgba(255,255,255,.025);border-color:rgba(255,255,255,.07)}
+.kx .row.wait .no{background:rgba(255,255,255,.08);color:rgba(255,255,255,.4)}
+.kx .sk{height:2.4rem;width:24rem;max-width:100%;border-radius:.7rem;background:linear-gradient(90deg,rgba(255,255,255,.04) 0%,rgba(255,255,255,.10) 50%,rgba(255,255,255,.04) 100%);background-size:200% 100%;animation:shim 1.6s linear infinite}
+.kx .row.next{border-color:rgba(95,224,228,.45);background:rgba(95,224,228,.06)}
+.kx .row.next .no{background:rgba(95,224,228,.25);color:#fff}
+.kx .row.next .sk{width:30rem;background:linear-gradient(90deg,rgba(95,224,228,.08) 0%,rgba(95,224,228,.28) 50%,rgba(95,224,228,.08) 100%);background-size:200% 100%;animation:shim .9s linear infinite;display:flex;align-items:center;padding-left:1.2rem;font-size:1.5rem;font-weight:700;color:#bff6f7;letter-spacing:.02em}
+.kx .row.pop{animation:pop .95s cubic-bezier(.2,.8,.2,1) both}
+.kx .row.pop .nm,.kx .row.pop .tp,.kx .row.pop .dp{animation:fadeup .6s ease-out both}
+.kx .row.pop .tp{animation-delay:.15s}.kx .row.pop .dp{animation-delay:.25s}
 .kx .run{position:absolute;left:7rem;right:7rem;top:14rem}
 .kx .eyebrow{font-size:1.6rem;font-weight:700;color:#7fb0ff;letter-spacing:.04em}
 .kx .team{font-size:8.6rem;font-weight:900;letter-spacing:-.055em;line-height:1.08;margin-top:1.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 3rem #070d20}
@@ -138,15 +147,17 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .congrats{margin-top:3.2rem;font-size:1.6rem;color:#f3d27a;letter-spacing:.4em;padding-left:.4em;font-weight:600}
 .kx .others{position:absolute;left:0;right:0;bottom:4.6rem;text-align:center;font-size:1.5rem;color:rgba(214,224,245,.72)}
 .kx .others b{color:#fff;margin:0 .7rem;font-weight:700}
-.kx .sus{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadeout .6s ease-in both;animation-delay:3.8s}
+.kx .sus{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;animation:fadein .5s ease-out both}
 .kx .sus h2{font-size:6.4rem;font-weight:900;margin:2rem 0 0;letter-spacing:-.045em;animation:breathe 1.2s ease-in-out infinite}
 .kx .ring{width:9rem;height:9rem;border-radius:50%;border:.4rem solid rgba(255,255,255,.12);border-top-color:#f3d27a;animation:spin 1s linear infinite;margin-top:3.4rem}
-.kx .anim .wl{animation:winin 1.2s cubic-bezier(.2,.8,.2,1) both;animation-delay:4.3s}
-.kx .anim .rays{animation:fadein 1.6s ease-out 4.3s both,spin 60s linear infinite}
-.kx .anim .glow{animation:fadein 1.6s ease-out 4.2s both}
-.kx .anim .others{animation:fadein 1s ease-out 6s both}
+.kx .enter .wl{animation:winin 1s cubic-bezier(.2,.8,.2,1) both}
+.kx .enter .rays{animation:fadein 1.6s ease-out both,spin 60s linear infinite}
+.kx .enter .glow{animation:fadein 1.6s ease-out both}
+.kx .enter .others{animation:fadein 1s ease-out .8s both}
 .kx .cf{position:absolute;top:-3rem;width:.7rem;height:1.25rem;border-radius:.15rem;opacity:0;animation:fall var(--t) cubic-bezier(.3,.2,.6,1) both;animation-delay:var(--d)}
-@keyframes roll{from{transform:translateY(0)}to{transform:translateY(var(--y))}}
+@keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
+@keyframes pop{0%{transform:scale(.975);border-color:#5fe0e4;box-shadow:0 0 0 0 rgba(95,224,228,0)}35%{border-color:#5fe0e4;box-shadow:0 0 2.6rem .2rem rgba(95,224,228,.35)}100%{transform:none;box-shadow:0 0 0 0 rgba(95,224,228,0)}}
+@keyframes fadeup{from{opacity:0;transform:translateY(.7rem)}to{opacity:1;transform:none}}
 @keyframes cardin{from{opacity:0;transform:translateY(1.6rem)}to{opacity:1;transform:none}}
 @keyframes land{0%{opacity:0}18%{opacity:1}100%{opacity:0}}
 @keyframes fadein{from{opacity:0}to{opacity:1}}
@@ -211,27 +222,29 @@ def _lobby(snap, judge_url, local_warn) -> str:
 </div>{warn}'''
 
 
-def _order(snap, animate) -> str:
+def _order(snap) -> str:
+    """추첨 결과를 한 팀씩 공개합니다. 공개 전 줄에는 팀 이름을 절대 보여 주지 않습니다."""
     S, st = snap["S"], snap["st"]
-    rng = random.Random(int(st["drawn_at"] * 1000) or 7)
-    names = [t["name"] for t in S["teams"]]
-    rows = []
+    e = snap["now"] - st["drawn_at"]
+    rows, nxt = [], None
     for i, t in enumerate(st["order"]):
-        final = S["teams"][t]["name"]
-        if animate:
-            fill = [rng.choice(names) for _ in range(9 + i * 2)]
-            strip = "".join(f"<div>{esc(x)}</div>" for x in fill) + f"<div>{esc(final)}</div>"
-            style = f'--d:{0.9 + i * 0.8:.2f}s;--y:-{len(fill) * 3.5:.1f}rem'
+        at = DRAW_FIRST + DRAW_STEP * i
+        team = S["teams"][t]
+        if e >= at:
+            cls = "row pop" if e - at < POP_SEC else "row"
+            tp = f'<div class="tp">{esc(team["topic"])}</div>' if team["topic"] else ""
+            body = (f'<div class="mid"><div class="nm">{esc(team["name"])}</div>{tp}</div>'
+                    f'<div class="dp">{esc(team["dept"])}</div>')
         else:
-            strip, style = f"<div>{esc(final)}</div>", ""
-        rows.append(f'<div class="row" style="{style}"><div class="no">{i + 1}</div>'
-                    f'<div class="mid"><div class="win"><div class="strip">{strip}</div></div>'
-                    + (f'<div class="tp">{esc(S["teams"][t]["topic"])}</div>' if S["teams"][t]["topic"] else "")
-                    + '</div>'
-                    f'<div class="dp">{esc(S["teams"][t]["dept"])}</div></div>')
+            if nxt is None:
+                nxt = i
+            cls = "row wait next" if nxt == i else "row wait"
+            body = f'<div class="mid"><div class="sk">{"추첨 중" if nxt == i else ""}</div></div>'
+        rows.append(f'<div class="{cls}"><div class="no">{i + 1}</div>{body}</div>')
+    sub = "추첨하고 있습니다" if nxt is not None else "현장에서 무작위로 추첨한 순서입니다"
     return f'''{_top(snap, chips=False)}
-<div class="ord-h"><h2>발표 순서</h2><p>현장에서 무작위로 추첨한 순서입니다</p></div>
-<div class="rows {"anim" if animate else ""}">{"".join(rows)}</div>'''
+<div class="ord-h"><h2>발표 순서</h2><p>{sub}</p></div>
+<div class="rows">{"".join(rows)}</div>'''
 
 
 def _running(snap, judge_url) -> str:
@@ -264,32 +277,33 @@ def _done(snap) -> str:
 <p>심사 결과를 집계하고 있습니다<span class="dots3"><span>.</span><span>.</span><span>.</span></span></p></div>'''
 
 
-def _reveal(snap, animate) -> str:
+def _reveal(snap) -> str:
     S, st = snap["S"], snap["st"]
     w = snap["winner"]
     if w is None:
         return _done(snap)
+    e = snap["now"] - st["revealed_at"]
+    if e < REVEAL_SUSPENSE:
+        return ('<div style="position:absolute;inset:0"><div class="sus"><div class="award">최우수상</div>'
+                '<h2>발표합니다</h2><div class="ring"></div></div></div>')
     team = S["teams"][w]
     meta = " · ".join(x for x in [esc(team["dept"]), esc(team["topic"])] if x)
     others = ""
     if S["show_runner_ups"]:
         names = "".join(f"<b>{esc(S['teams'][t]['name'])}</b>" for t in st["order"] if t != w)
         others = f'<div class="others">우수상 {names}</div>'
-    sus, conf = "", ""
-    if animate:
-        sus = '<div class="sus"><div class="award">최우수상</div><h2>발표합니다</h2><div class="ring"></div></div>'
+    conf = ""
+    if e < REVEAL_SUSPENSE + CONFETTI_SEC:
         rng = random.Random(int(st["revealed_at"] * 1000) or 3)
         cols = ["#f3d27a", "#ffe7a3", "#4f8bff", "#5fe0e4", "#ffffff", "#c8923a"]
-        pieces = []
-        for _ in range(70):
-            pieces.append(
-                f'<i class="cf" style="left:{rng.uniform(2, 98):.1f}%;background:{rng.choice(cols)};'
-                f'--d:{4.4 + rng.uniform(0, 2.2):.2f}s;--t:{rng.uniform(3.6, 6.2):.2f}s;'
-                f'--x:{rng.uniform(-8, 8):.1f}rem;--r:{rng.choice([-1, 1]) * rng.randint(240, 900)}deg;'
-                f'width:{rng.uniform(.45, .8):.2f}rem;height:{rng.uniform(.8, 1.4):.2f}rem"></i>')
-        conf = "".join(pieces)
-    return f'''<div class="{"anim" if animate else ""}" style="position:absolute;inset:0">
-<div class="glow"></div><div class="rays"></div>{sus}
+        conf = "".join(
+            f'<i class="cf" style="left:{rng.uniform(2, 98):.1f}%;background:{rng.choice(cols)};'
+            f'--d:{0.15 + rng.uniform(0, 2.0):.2f}s;--t:{rng.uniform(3.4, 5.8):.2f}s;'
+            f'--x:{rng.uniform(-8, 8):.1f}rem;--r:{rng.choice([-1, 1]) * rng.randint(240, 900)}deg;'
+            f'width:{rng.uniform(.45, .8):.2f}rem;height:{rng.uniform(.8, 1.4):.2f}rem"></i>' for _ in range(70))
+    enter = "enter" if e < REVEAL_SUSPENSE + REVEAL_ENTER else ""
+    return f'''<div class="{enter}" style="position:absolute;inset:0">
+<div class="glow"></div><div class="rays"></div>
 <div class="center wl"><div class="award">최우수상</div><div class="wname" style="{fit(team["name"], 10, 82)}">{esc(team["name"])}</div>
 {f'<div class="wmeta">{meta}</div>' if meta else ""}<div class="congrats">축하합니다</div></div>{others}{conf}</div>'''
 
@@ -298,13 +312,13 @@ def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
     st = snap["st"]
     ph, now = st["phase"], snap["now"]
     if ph == "order":
-        body = _order(snap, animate=(now - st["drawn_at"]) < DRAW_ANIM_SEC)
+        body = _order(snap)
     elif ph == "running" and snap["cur"] is not None:
         body = _running(snap, judge_url)
     elif ph == "done":
         body = _done(snap)
     elif ph == "reveal":
-        body = _reveal(snap, animate=(now - st["revealed_at"]) < REVEAL_ANIM_SEC)
+        body = _reveal(snap)
     else:
         body = _lobby(snap, judge_url, local_warn)
     return _one(f'<div class="kx"><div class="bg"></div>{body}</div>')
