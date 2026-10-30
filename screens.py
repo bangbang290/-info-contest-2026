@@ -91,19 +91,21 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .pip{width:.85rem;height:.85rem;border-radius:50%;background:rgba(255,255,255,.18)}
 .kx .pip.on{background:#5fe0e4;box-shadow:0 0 .8rem rgba(95,224,228,.8)}
 .kx .warn{position:absolute;left:7rem;bottom:2.4rem;font-size:1.05rem;color:#ffb4a8}
-.kx .ord-h{position:absolute;left:7rem;right:7rem;top:9.6rem}
-.kx .ord-h h2{font-size:4.4rem;font-weight:900;margin:0;letter-spacing:-.045em}
-.kx .ord-h p{font-size:1.6rem;color:rgba(214,224,245,.72);margin:.8rem 0 0}
-.kx .rows{position:absolute;left:7rem;right:7rem;top:21rem;display:flex;flex-direction:column;gap:.9rem}
-.kx .row{display:flex;align-items:center;gap:2.2rem;height:5.4rem;padding:0 2.6rem 0 1.1rem;border-radius:1.2rem;background:linear-gradient(90deg,rgba(255,255,255,.09),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.13);position:relative;overflow:hidden}
+.kx .ord-h{position:absolute;left:7rem;right:7rem;top:7.8rem}
+.kx .ord-h h2{font-size:4rem;font-weight:900;margin:0;letter-spacing:-.045em}
+.kx .ord-h p{font-size:1.5rem;color:rgba(214,224,245,.72);margin:.6rem 0 0}
+.kx .rows{position:absolute;left:7rem;right:7rem;top:16.2rem;display:flex;flex-direction:column;gap:.7rem}
+.kx .row{display:flex;align-items:center;gap:2.2rem;height:6.4rem;padding:0 2.6rem 0 1.1rem;border-radius:1.2rem;background:linear-gradient(90deg,rgba(255,255,255,.09),rgba(255,255,255,.03));border:1px solid rgba(255,255,255,.13);position:relative;overflow:hidden}
 .kx .row .no{flex:none;width:3.6rem;height:3.6rem;border-radius:50%;display:grid;place-items:center;font-size:1.8rem;font-weight:900;background:linear-gradient(135deg,#4f8bff,#5fe0e4);color:#fff}
-.kx .row .win{flex:1;min-width:0;height:5.4rem;overflow:hidden}
-.kx .strip div{height:5.4rem;line-height:5.4rem;font-size:2.9rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.04em}
+.kx .row .mid{flex:1;min-width:0}
+.kx .row .win{height:3.5rem;overflow:hidden}
+.kx .row .tp{font-size:1.45rem;font-weight:500;color:rgba(214,224,245,.78);margin-top:.15rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.02em}
+.kx .strip div{height:3.5rem;line-height:3.5rem;font-size:2.7rem;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;letter-spacing:-.04em}
 .kx .row .dp{flex:none;font-size:1.6rem;color:rgba(214,224,245,.72);max-width:24rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kx .anim .row{animation:cardin .6s ease-out both;animation-delay:calc(var(--d) - .5s)}
 .kx .anim .strip{animation:roll 2.2s cubic-bezier(.15,.72,.2,1) both;animation-delay:var(--d)}
 .kx .anim .row::after{content:"";position:absolute;inset:0;border-radius:inherit;border:2px solid #5fe0e4;opacity:0;animation:land 1.4s ease-out both;animation-delay:calc(var(--d) + 2.05s)}
-.kx .anim .dp{animation:fadein .6s ease-out both;animation-delay:calc(var(--d) + 2.1s)}
+.kx .anim .dp,.kx .anim .tp{animation:fadein .6s ease-out both;animation-delay:calc(var(--d) + 2.1s)}
 .kx .run{position:absolute;left:7rem;right:7rem;top:14rem}
 .kx .eyebrow{font-size:1.6rem;font-weight:700;color:#7fb0ff;letter-spacing:.04em}
 .kx .team{font-size:8.6rem;font-weight:900;letter-spacing:-.055em;line-height:1.08;margin-top:1.2rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 0 3rem #070d20}
@@ -219,11 +221,13 @@ def _order(snap, animate) -> str:
         if animate:
             fill = [rng.choice(names) for _ in range(9 + i * 2)]
             strip = "".join(f"<div>{esc(x)}</div>" for x in fill) + f"<div>{esc(final)}</div>"
-            style = f'--d:{0.9 + i * 0.8:.2f}s;--y:-{len(fill) * 5.4:.1f}rem'
+            style = f'--d:{0.9 + i * 0.8:.2f}s;--y:-{len(fill) * 3.5:.1f}rem'
         else:
             strip, style = f"<div>{esc(final)}</div>", ""
         rows.append(f'<div class="row" style="{style}"><div class="no">{i + 1}</div>'
-                    f'<div class="win"><div class="strip">{strip}</div></div>'
+                    f'<div class="mid"><div class="win"><div class="strip">{strip}</div></div>'
+                    + (f'<div class="tp">{esc(S["teams"][t]["topic"])}</div>' if S["teams"][t]["topic"] else "")
+                    + '</div>'
                     f'<div class="dp">{esc(S["teams"][t]["dept"])}</div></div>')
     return f'''{_top(snap, chips=False)}
 <div class="ord-h"><h2>발표 순서</h2><p>현장에서 무작위로 추첨한 순서입니다</p></div>
