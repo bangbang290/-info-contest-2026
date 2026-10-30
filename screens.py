@@ -139,7 +139,12 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .center p{font-size:2rem;color:rgba(214,224,245,.78);margin:1.6rem 0 0}
 .kx .dots3 span{display:inline-block;animation:blink 1.4s infinite both}
 .kx .dots3 span:nth-child(2){animation-delay:.2s}.kx .dots3 span:nth-child(3){animation-delay:.4s}
-.kx .rays{position:absolute;left:50%;top:47%;width:84rem;height:84rem;margin:-42rem 0 0 -42rem;background:repeating-conic-gradient(from 0deg,rgba(255,214,120,.11) 0deg 5deg,transparent 5deg 15deg);-webkit-mask-image:radial-gradient(circle,#000 0%,transparent 60%);mask-image:radial-gradient(circle,#000 0%,transparent 60%);animation:spin 60s linear infinite}
+.kx .spk{position:absolute;width:var(--s);height:var(--s);margin:calc(var(--s) / -2) 0 0 calc(var(--s) / -2);opacity:0;animation:twinkle var(--t) ease-in-out infinite;animation-delay:var(--d)}
+.kx .spk::before{content:"";position:absolute;inset:-40%;border-radius:50%;background:radial-gradient(circle,var(--c) 0%,transparent 60%);opacity:.45}
+.kx .spk::after{content:"";position:absolute;inset:0;background:linear-gradient(135deg,#fff,var(--c));clip-path:polygon(50% 0,58% 42%,100% 50%,58% 58%,50% 100%,42% 58%,0 50%,42% 42%)}
+.kx .fw{position:absolute;width:0;height:0}
+.kx .fw i{position:absolute;left:0;top:0;width:.55rem;height:.55rem;margin:-.275rem 0 0 -.275rem;border-radius:50%;background:var(--c);box-shadow:0 0 .9rem var(--c);opacity:0;animation:burst var(--t) cubic-bezier(.12,.65,.3,1) infinite;animation-delay:var(--d)}
+.kx .fw b{position:absolute;left:0;top:0;width:2.4rem;height:2.4rem;margin:-1.2rem 0 0 -1.2rem;border-radius:50%;background:radial-gradient(circle,#fff 0%,var(--c) 35%,transparent 70%);opacity:0;animation:flash var(--t) ease-out infinite;animation-delay:var(--d)}
 .kx .glow{position:absolute;left:50%;top:47%;width:70rem;height:40rem;margin:-20rem 0 0 -35rem;background:radial-gradient(closest-side,rgba(255,196,90,.24),transparent)}
 .kx .award{font-size:2.2rem;font-weight:800;letter-spacing:.55em;padding-left:.55em;background:linear-gradient(90deg,#c8923a,#ffe7a3 50%,#c8923a);-webkit-background-clip:text;background-clip:text;color:transparent}
 .kx .wname{font-size:10rem;font-weight:900;letter-spacing:-.055em;line-height:1.1;margin-top:2rem;max-width:88rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 .4rem 3rem rgba(0,0,0,.35)}
@@ -151,10 +156,12 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .sus h2{font-size:6.4rem;font-weight:900;margin:2rem 0 0;letter-spacing:-.045em;animation:breathe 1.2s ease-in-out infinite}
 .kx .ring{width:9rem;height:9rem;border-radius:50%;border:.4rem solid rgba(255,255,255,.12);border-top-color:#f3d27a;animation:spin 1s linear infinite;margin-top:3.4rem}
 .kx .enter .wl{animation:winin 1s cubic-bezier(.2,.8,.2,1) both}
-.kx .enter .rays{animation:fadein 1.6s ease-out both,spin 60s linear infinite}
 .kx .enter .glow{animation:fadein 1.6s ease-out both}
 .kx .enter .others{animation:fadein 1s ease-out .8s both}
 .kx .cf{position:absolute;top:-3rem;width:.7rem;height:1.25rem;border-radius:.15rem;opacity:0;animation:fall var(--t) cubic-bezier(.3,.2,.6,1) both;animation-delay:var(--d)}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(.25) rotate(0deg)}45%{opacity:1;transform:scale(1) rotate(45deg)}60%{opacity:.85;transform:scale(.8) rotate(60deg)}}
+@keyframes burst{0%{opacity:0;transform:rotate(var(--a)) translateX(0) scale(1)}6%{opacity:1}65%{opacity:.95}100%{opacity:0;transform:rotate(var(--a)) translateX(var(--r)) translateY(1.2rem) scale(.35)}}
+@keyframes flash{0%{opacity:0;transform:scale(.3)}6%{opacity:1;transform:scale(1)}25%{opacity:0;transform:scale(1.6)}100%{opacity:0}}
 @keyframes shim{from{background-position:200% 0}to{background-position:-200% 0}}
 @keyframes pop{0%{transform:scale(.975);border-color:#5fe0e4;box-shadow:0 0 0 0 rgba(95,224,228,0)}35%{border-color:#5fe0e4;box-shadow:0 0 2.6rem .2rem rgba(95,224,228,.35)}100%{transform:none;box-shadow:0 0 0 0 rgba(95,224,228,0)}}
 @keyframes fadeup{from{opacity:0;transform:translateY(.7rem)}to{opacity:1;transform:none}}
@@ -277,6 +284,31 @@ def _done(snap) -> str:
 <p>심사 결과를 집계하고 있습니다<span class="dots3"><span>.</span><span>.</span><span>.</span></span></p></div>'''
 
 
+def _celebrate(seed: int) -> str:
+    rng = random.Random(seed)
+    gold = ["#ffe7a3", "#f3d27a", "#ffffff", "#ffd88a"]
+    out = []
+    import math
+    for _ in range(34):
+        a = rng.uniform(0, 2 * math.pi)
+        k = rng.uniform(.78, 1.18)
+        x, y = 50 + math.cos(a) * 41 * k, 47 + math.sin(a) * 36 * k
+        if not (2 < x < 98 and 4 < y < 96):
+            continue
+        out.append(f'<i class="spk" style="left:{x:.1f}%;top:{y:.1f}%;--s:{rng.uniform(.9, 2.2):.2f}rem;'
+                   f'--c:{rng.choice(gold)};--t:{rng.uniform(1.8, 3.2):.2f}s;--d:{rng.uniform(0, 3):.2f}s"></i>')
+    bursts = [(16, 22, ["#ffe7a3", "#f3d27a", "#ffffff"]), (84, 20, ["#5fe0e4", "#ffffff", "#9fc2ff"]),
+              (10, 68, ["#9fc2ff", "#4f8bff", "#ffffff"]), (90, 70, ["#ffe7a3", "#ffd88a", "#ffffff"]),
+              (30, 10, ["#5fe0e4", "#ffe7a3"]), (70, 9, ["#ffffff", "#f3d27a"])]
+    for i, (x, y, cols) in enumerate(bursts):
+        t, d = rng.uniform(2.6, 3.4), i * .55 + rng.uniform(0, .3)
+        n = 18
+        parts = "".join(f'<i style="--a:{j * 360 / n + rng.uniform(-6, 6):.0f}deg;--r:{rng.uniform(6.5, 9.5):.1f}rem;'
+                        f'--c:{rng.choice(cols)};--t:{t:.2f}s;--d:{d:.2f}s"></i>' for j in range(n))
+        out.append(f'<div class="fw" style="left:{x}%;top:{y}%"><b style="--c:{cols[0]};--t:{t:.2f}s;--d:{d:.2f}s"></b>{parts}</div>')
+    return "".join(out)
+
+
 def _reveal(snap) -> str:
     S, st = snap["S"], snap["st"]
     w = snap["winner"]
@@ -303,7 +335,7 @@ def _reveal(snap) -> str:
             f'width:{rng.uniform(.45, .8):.2f}rem;height:{rng.uniform(.8, 1.4):.2f}rem"></i>' for _ in range(70))
     enter = "enter" if e < REVEAL_SUSPENSE + REVEAL_ENTER else ""
     return f'''<div class="{enter}" style="position:absolute;inset:0">
-<div class="glow"></div><div class="rays"></div>
+<div class="glow"></div>{_celebrate(int(st["revealed_at"] * 1000) or 5)}
 <div class="center wl"><div class="award">최우수상</div><div class="wname" style="{fit(team["name"], 10, 82)}">{esc(team["name"])}</div>
 {f'<div class="wmeta">{meta}</div>' if meta else ""}<div class="congrats">축하합니다</div></div>{others}{conf}</div>'''
 
