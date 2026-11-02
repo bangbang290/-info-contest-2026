@@ -473,7 +473,13 @@ ENGINE_JS = r"""
     if (!el) return;
     var v = el.getAttribute('title') || 'S|', p = v.indexOf('P|') === 0;
     var want = '[KX:' + (p ? 'P:' + v.slice(2) : 'S:') + ':] ' + (p ? v.slice(2) + ' 발표 중' : '스크린');
-    if (document.title !== want) document.title = want;
+    // Streamlit Cloud는 앱을 바깥 틀(Manage app 버튼이 있는 페이지) 안에 넣어 보여 주므로, 바깥 창 제목까지 바꿈
+    var w = window;
+    for (var n = 0; n < 4 && w; n++) {
+      try { if (w.document.title !== want) w.document.title = want; } catch (e) { break; }
+      if (w === w.parent) break;
+      w = w.parent;
+    }
   }
   try { new MutationObserver(winTitle).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] }); } catch (e) {}
   // 자동 재생이 허용된 창(도우미가 연 스크린 창)이면 클릭 없이 소리를 켬
