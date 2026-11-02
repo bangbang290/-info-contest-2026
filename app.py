@@ -71,9 +71,11 @@ div[data-testid="stButtonGroup"] button p{font-size:1.15rem!important;font-weigh
 
 # 채점표(sheet): 팀마다 5·4·3·2·1 버튼을 한 줄로
 SHEET_CSS = """<style>
-div[data-testid="stButtonGroup"]>div,div[data-testid="stButtonGroup"] div:has(> button){flex-wrap:nowrap!important;gap:.4rem!important;width:100%}
-div[data-testid="stButtonGroup"] button{flex:1 1 0!important;min-width:0!important;min-height:3.4rem;border-radius:12px!important;margin:0!important;padding:0 .2rem!important}
-div[data-testid="stButtonGroup"] button p{font-size:1.2rem!important;font-weight:800;white-space:nowrap}
+div[data-testid="stButtonGroup"]{width:100%!important}
+div[data-testid="stButtonGroup"]>div:last-child,div[data-testid="stButtonGroup"] div:has(> button){display:flex!important;flex-wrap:nowrap!important;gap:.4rem!important;width:100%!important;max-width:none!important}
+div[data-testid="stButtonGroup"]>div:last-child::after,div[data-testid="stButtonGroup"] div:has(> button)::after{content:none!important;display:none!important}
+div[data-testid="stButtonGroup"] button{flex:1 1 0!important;min-width:3.2rem!important;max-width:none!important;min-height:3.6rem;border-radius:12px!important;margin:0!important;padding:0 .2rem!important}
+div[data-testid="stButtonGroup"] button p{font-size:1.25rem!important;font-weight:800;white-space:nowrap;margin:0}
 .jx-legend{display:flex;flex-wrap:wrap;gap:.25rem .9rem;font-size:.95rem;color:#b9c6e4;margin:.3rem 0 .2rem;padding:.6rem .8rem;border-radius:12px;background:rgba(255,255,255,.05)}
 .jx-legend b{color:#fff;margin-right:.15rem}
 .jx-save{font-size:.95rem;color:#9fe6c4;margin:.5rem 0 .2rem;word-break:keep-all}
