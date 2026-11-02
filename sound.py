@@ -139,6 +139,140 @@ ENGINE_JS = r"""
       });
     };
 
+    // 피아노: 음마다 한 번만 소리(배음+두 번째 현+해머 소리)를 계산해 저장해 두고, 칠 때는 그대로 재생합니다(가볍게 돌아가도록).
+    var PB = {};
+    function pianoBuf(m) {
+      if (PB[m]) return PB[m];
+      var sr = ctx.sampleRate, f = mtof(m), life = Math.max(1.1, 4.6 - (m - 40) * 0.075);
+      var len = Math.floor(sr * (life + 0.2)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+      var bright = Math.max(0.45, 1 - (m - 60) * 0.014), T1 = life / 4.2;
+      var amps = m < 64 ? [1, 0.5, 0.3, 0.17, 0.1] : [1, 0.5, 0.28, 0.15];
+      var parts = [];
+      for (var n = 1; n <= amps.length; n++) {
+        var fn = f * n * Math.sqrt(1 + 0.00035 * n * n);
+        if (fn > 7000) break;
+        parts.push({ w: 2 * Math.PI * fn / sr, a: amps[n - 1] * (n > 1 ? bright : 1), k: Math.exp(-1 / (sr * T1 / (1 + 0.7 * (n - 1)))), e: 1 });
+      }
+      parts.push({ w: 2 * Math.PI * f * Math.pow(2, 4 / 1200) / sr, a: 0.22, k: Math.exp(-1 / (sr * T1)), e: 1 });   // 두 번째 현(살짝 어긋난 음)
+      var env = 1, kEnv = Math.exp(-1 / (sr * T1)), att = Math.floor(sr * 0.005), hz = Math.floor(sr * 0.03), hy = 0, peak = 0;
+      var hc = Math.min(0.95, 2 * Math.PI * Math.min(6000, f * 3) / sr);
+      for (var i = 0; i < len; i++) {
+        var x = 0;
+        for (var j = 0; j < parts.length; j++) { var P = parts[j]; x += P.a * (0.15 + 0.85 * P.e) * Math.sin(P.w * i); P.e *= P.k; }
+        if (i < hz) { hy += ((Math.random() * 2 - 1) - hy) * hc; x += hy * 0.25 * (1 - i / hz); }   // 해머가 줄을 치는 소리
+        x *= env * (i < att ? i / att : 1); env *= kEnv;
+        d[i] = x; if (Math.abs(x) > peak) peak = Math.abs(x);
+      }
+      var fade = Math.floor(sr * 0.2);
+      for (var q = 0; q < fade; q++) d[len - 1 - q] *= q / fade;
+      for (var r = 0; r < len; r++) d[r] *= 0.85 / (peak || 1);
+      PB[m] = { buf: buf, life: life };
+      return PB[m];
+    }
+    S.piano = function (bus, t, m, v, end, dry) {
+      var pb = pianoBuf(m), off = Math.min(end || (t + pb.life), t + pb.life);
+      var src = ctx.createBufferSource(); src.buffer = pb.buf;
+      var g = ctx.createGain();
+      g.gain.setValueAtTime(v, t);
+      g.gain.setValueAtTime(v, off);
+      g.gain.linearRampToValueAtTime(0, off + 0.22);   // 페달을 뗀 것처럼 잦아듦
+      src.connect(g);
+      if (dry) g.connect(bus); else send(g, bus, 0.42);   // dry: 잔향은 묶어서 한 번에(가볍게)
+      src.start(t); src.stop(off + 0.24);
+    };
+    // 현악기 배경(부드럽게 들어오고 비브라토가 있는 소리)
+    S.strings = function (bus, t, notes, dur, v) {
+      var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500; lp.Q.value = 0.3;
+      var hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 120;
+      var g = ctx.createGain(), a = Math.min(0.9, dur * 0.4);
+      g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + a);
+      g.gain.setValueAtTime(v, t + Math.max(a, dur - 0.15)); g.gain.linearRampToValueAtTime(0.0001, t + dur + 0.7);
+      lp.connect(hp); hp.connect(g); send(g, bus, 0.6);
+      var lfo = ctx.createOscillator(); lfo.frequency.value = 5.2; var lg = ctx.createGain(); lg.gain.value = 7; lfo.connect(lg);
+      notes.forEach(function (m) {
+        [-9, 0, 9].forEach(function (det) {
+          var o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = mtof(m); o.detune.value = det;
+          lg.connect(o.detune);
+          var og = ctx.createGain(); og.gain.value = 1 / (notes.length * 3);
+          o.connect(og); og.connect(lp); o.start(t); o.stop(t + dur + 0.8);
+        });
+      });
+      lfo.start(t); lfo.stop(t + dur + 0.8);
+    };
+
+    // 대기 음악: 경쾌한 피아노 왈츠(창작곡, D장조 3/4박자 152bpm). A-A'-B(단조 색채)-A 32마디,
+    // 두 번째 반복에는 글로켄슈필(회전목마 같은 반짝임)과 현악기를 더함 → 약 76초마다 반복
+    var CH = {   // 왼손: 베이스, '짝짝' 화음
+      D: [38, [57, 62, 66]], Ac: [37, [57, 61, 64]], Bm: [47, [59, 62, 66]], Fm: [42, [57, 61, 66]],
+      G: [43, [59, 62, 67]], Df: [42, [57, 62, 66]], Em7: [40, [59, 62, 67]], A7: [45, [55, 61, 64]],
+      D7f: [42, [57, 60, 66]], F7: [42, [58, 61, 64]], D7: [38, [57, 60, 66]], Em: [40, [59, 64, 67]]
+    };
+    var A1 = [
+      ['D', [[0, 78, 1], [1, 76, 0.5], [1.5, 78, 0.5], [2, 81, 1]]],
+      ['Ac', [[0, 79, 1.5], [1.5, 78, 0.5], [2, 76, 1]]],
+      ['Bm', [[0, 74, 1], [1, 73, 0.5], [1.5, 74, 0.5], [2, 78, 1]]],
+      ['Fm', [[0, 76, 2], [2, 73, 1]]],
+      ['G', [[0, 74, 0.5], [0.5, 76, 0.5], [1, 78, 1], [2, 79, 1]]],
+      ['Df', [[0, 81, 1], [1, 78, 1], [2, 74, 1]]],
+      ['Em7', [[0, 76, 0.5], [0.5, 78, 0.5], [1, 79, 1], [2, 83, 1]]],
+      ['A7', [[0, 81, 1.5], [1.5, 79, 0.5], [2, 76, 1]]]
+    ];
+    var A2 = A1.slice(0, 3).concat([
+      ['D7f', [[0, 78, 1], [1, 76, 1], [2, 72, 1]]],
+      ['G', [[0, 71, 1], [1, 74, 1], [2, 79, 1]]],
+      ['A7', [[0, 79, 0.5], [0.5, 78, 0.5], [1, 76, 1], [2, 73, 1]]],
+      ['D', [[0, 74, 2]]],
+      ['D', [[1, 69, 0.5], [1.5, 71, 0.5], [2, 73, 0.5], [2.5, 76, 0.5]]]
+    ]);
+    var B1 = [
+      ['Bm', [[0, 78, 1.5], [1.5, 76, 0.5], [2, 74, 1]]],
+      ['F7', [[0, 76, 1], [1, 73, 1], [2, 70, 1]]],
+      ['Bm', [[0, 71, 0.5], [0.5, 73, 0.5], [1, 74, 1], [2, 78, 1]]],
+      ['D7', [[0, 81, 1.5], [1.5, 79, 0.5], [2, 78, 1]]],
+      ['G', [[0, 79, 1], [1, 83, 1], [2, 86, 1]]],
+      ['Df', [[0, 81, 1.5], [1.5, 78, 0.5], [2, 74, 1]]],
+      ['Em', [[0, 79, 0.5], [0.5, 78, 0.5], [1, 76, 1], [2, 71, 1]]],
+      ['A7', [[0, 73, 1], [1, 76, 1], [2, 79, 1]]]
+    ];
+    var TUNE = A1.concat(A2, B1, A1);
+    var DYN = [];
+    for (var q = 0; q < 32; q++) DYN.push(q < 16 ? 0.95 : q < 24 ? 1.06 : 1.0);
+    S.waltzBar = 3 * 60 / 152;
+    S.waltz = function (bus, t, i) {            // 한 마디
+      var beat = S.waltzBar / 3, n = i % 32, row = TUNE[n], ch = CH[row[0]], pass = Math.floor(i / 32) % 2, d = DYN[n];
+      function hum() { return (Math.random() - 0.5) * 0.012; }
+      function panned(x) {                       // 왼손은 살짝 왼쪽, 오른손은 살짝 오른쪽
+        var p = ctx.createStereoPanner ? ctx.createStereoPanner() : ctx.createGain();
+        if (p.pan) p.pan.value = x;
+        send(p, bus, 0.42);
+        setTimeout(function () { try { p.disconnect(); } catch (e) {} }, (t - ctx.currentTime + S.waltzBar + 6) * 1000);
+        return p;
+      }
+      var L = panned(-0.2), R = panned(0.16);
+      // 쿵(베이스) - 짝 - 짝 : 둘째 박을 살짝 당겨 왈츠 특유의 출렁임
+      S.piano(L, t, ch[0], 0.13 * d, t + beat * 1.1, 1);
+      if (pass === 1) S.piano(L, t + 0.004, ch[0] + 12, 0.055 * d, t + beat * 1.1, 1);
+      [0.94, 2].forEach(function (bt) {
+        var at = t + bt * beat + hum();
+        ch[1].forEach(function (m, k) { S.piano(L, at + k * 0.004, m, 0.05 * d * (bt === 2 ? 0.9 : 1), at + beat * 0.5, 1); });
+      });
+      row[1].forEach(function (x) {
+        var nt = t + x[0] * beat + hum(), len = x[2] * beat;
+        S.piano(R, nt, x[1], 0.19 * d * (0.94 + Math.random() * 0.12), nt + len * 0.95 + 0.12, 1);
+        if (pass === 1) S.bell(R, nt, x[1] + 12, 0.038 * d, 0.9);   // 회전목마 같은 반짝임
+      });
+      if (pass === 1) S.strings(bus, t, [ch[1][0], ch[1][2]], S.waltzBar, 0.04 * d);
+    };
+
+    // 화면을 클릭해 소리가 켜지면, 왈츠에 쓰는 피아노 음을 조금씩 미리 만들어 둠(첫 마디가 밀리지 않게)
+    S.warm = function () {
+      var want = {};
+      Object.keys(CH).forEach(function (k) { want[CH[k][0]] = want[CH[k][0] + 12] = 1; CH[k][1].forEach(function (m) { want[m] = 1; }); });
+      TUNE.forEach(function (r) { r[1].forEach(function (x) { want[x[1]] = 1; }); });
+      var list = Object.keys(want).map(Number);
+      (function step() { var m = list.shift(); if (m == null) return; pianoBuf(m); setTimeout(step, 25); })();
+    };
+
     // 장면별 음악 조각 (일정 주기마다 반복)
     var PROG = [[50, 54, 57, 61, 64], [47, 50, 54, 57, 61], [43, 47, 50, 54, 57], [45, 49, 52, 55, 59]];
     var PENTA = [74, 76, 78, 81, 83, 86, 88];
@@ -209,6 +343,7 @@ ENGINE_JS = r"""
     K.master = ctx.createGain(); K.master.gain.value = 0; K.master.connect(comp); comp.connect(lim); lim.connect(ctx.destination);
     K.fx = ctx.createGain(); K.fx.gain.value = 1; K.fx.connect(K.master);
     K.syn = Synth(ctx, K.master);
+    try { K.syn.warm(); } catch (e) {}
     return true;
   }
   function applyVol(force) {
@@ -252,6 +387,8 @@ ENGINE_JS = r"""
     K.roll = K.timp = null;
   }
   function later(sec, fn) { K.cur.timers.push(setTimeout(fn, sec * 1000)); }
+  // 첫 대기 화면: 경쾌한 피아노 왈츠 / 추첨 직후·축하 뒤: 기존의 잔잔한 배경음
+  function lobbyMusic() { return loop(K.syn.waltz, K.syn.waltzBar, 0.9, { fadeIn: 2.5 }); }
   function ambient(level) { return loop(K.syn.ambient, 4, level == null ? 0.9 : level, { fadeIn: 2 }); }
   function winSeq() {
     var S = K.syn;
@@ -262,7 +399,7 @@ ENGINE_JS = r"""
   function enter(m) {
     var S = K.syn;
     switch (m.scene) {
-      case 'lobby': stopAll(1.2); ambient(0.9); break;
+      case 'lobby': stopAll(1.2); lobbyMusic(); break;
       case 'order':
         stopAll(0.6);
         if (m.a >= m.b) { ambient(0.7); break; }
