@@ -23,12 +23,13 @@ ONLINE_SEC = 15          # 이 시간 안에 신호가 있으면 '접속 중'
 _lock = threading.RLock()
 
 DEFAULT_STATE = {
-    "phase": "lobby",        # lobby → order → running → done → reveal
+    "phase": "lobby",        # lobby → order → running → (final: 채점표 방식만) → done → reveal
     "order": [],             # 발표 순서 (팀 번호 목록)
     "drawn_at": 0.0,
     "cur": 0,                # 현재 발표 순번 (order의 인덱스)
     "step": "presenting",    # presenting(발표 중) / scoring(평가 요청)
     "closed": [],            # 평가가 마감된 팀 번호
+    "final_ok": [],          # 채점표 방식: 최종 제출을 누른 심사위원(token)
     "revealed_at": 0.0,
     "winner_override": None, # 동점일 때 관리자가 정한 최우수 팀
 }
@@ -66,6 +67,14 @@ def _tx():
 def _get(c, key, default=None):
     r = c.execute("SELECT v FROM kv WHERE k=?", (key,)).fetchone()
     return json.loads(r["v"]) if r else default
+
+
+def _st(c) -> dict:
+    """진행 상태(예전 백업처럼 빠진 칸이 있어도 기본값으로 채움)."""
+    st = _get(c, "state") or {}
+    for k, v in DEFAULT_STATE.items():
+        st.setdefault(k, copy.deepcopy(v))
+    return st
 
 
 def _put(c, key, value):
@@ -128,6 +137,8 @@ def normalize_settings(s: dict) -> dict:
     s["grade_labels"], s["grade_ratio"] = (labels[:k], ratio[:k]) if labels and ratio else (
         ["매우우수", "우수", "보통", "미흡", "매우미흡"], [1.0, 0.8, 0.6, 0.4, 0.2])
     s["trim_high_low"] = False   # 최고·최저 제외 기능은 쓰지 않습니다(5점 척도)
+    # sheet: 채점표 방식(마지막 발표까지 수정 가능, 끝나고 최종 제출) / live: 발표마다 마감
+    s["score_mode"] = "live" if s.get("score_mode") == "live" else "sheet"
     s["show_runner_ups"] = bool(s.get("show_runner_ups", False))
     s["sound"] = bool(s.get("sound", True))
     s["volume"] = int(max(0, min(100, _num(s.get("volume"), 70))))
@@ -151,9 +162,11 @@ def get_settings() -> dict:
     with _lock:
         c = _connect()
         try:
-            return _get(c, "settings")
+            raw = _get(c, "settings")
         finally:
             c.close()
+    # 예전 버전에서 저장된 설정에 새 항목이 없어도 기본값으로 채워 돌려줍니다.
+    return normalize_settings(raw) if raw else raw
 
 
 def _structure(s):
@@ -177,6 +190,8 @@ def save_settings(new: dict, reset_if_needed: bool = False) -> dict:
         raise FlowError("심사위원과 평가 항목은 1개 이상이어야 합니다.")
     with _tx() as c:
         old = _get(c, "settings")
+        if old.get("score_mode", "sheet") != new["score_mode"] and _st(c)["phase"] in ("running", "final"):
+            raise FlowError("발표가 진행 중일 때는 평가 방식을 바꿀 수 없습니다. [데이터] 탭에서 '점수·진행 초기화' 후 바꿔 주세요.")
         structural = _structure(old) != _structure(new)
         has_scores = c.execute("SELECT COUNT(*) AS n FROM scores").fetchone()["n"] > 0
         if structural:
@@ -235,6 +250,27 @@ def current_team(st) -> int | None:
     if st["phase"] == "running" and st["order"] and 0 <= st["cur"] < len(st["order"]):
         return st["order"][st["cur"]]
     return None
+
+
+def presented(st) -> set:
+    """발표가 끝난 팀(화면 표시용)."""
+    if st["phase"] in ("final", "done", "reveal"):
+        return set(st["order"])
+    out = set(st.get("closed", []))
+    if st["phase"] == "running":
+        out |= set(st["order"][:st["cur"]])
+        if st["step"] == "scoring":
+            out.add(st["order"][st["cur"]])
+    return out
+
+
+def sheet_open(st, team: int) -> bool:
+    """채점표 방식에서 이 팀 점수를 지금 넣거나 고칠 수 있는지(발표가 시작된 팀 ~ 최종 마감 전)."""
+    if team in st["closed"] or team not in st["order"]:
+        return False
+    if st["phase"] == "final":
+        return True
+    return st["phase"] == "running" and st["order"].index(team) <= st["cur"]
 
 
 # ───────────────────────── 심사위원 자리
@@ -296,7 +332,7 @@ def total_of(vals) -> float:
 def submit(token: str, team: int, vals: list, proxy: bool = False) -> float:
     """점수 제출(같은 팀에 다시 내면 덮어씀). proxy=True는 관리자 대리 입력으로 마감 후에도 허용합니다."""
     with _tx() as c:
-        S, st = _get(c, "settings"), _get(c, "state")
+        S, st = normalize_settings(_get(c, "settings")), _st(c)
         seat = c.execute("SELECT idx FROM seats WHERE token=?", (str(token),)).fetchone()
         if not seat or seat["idx"] >= len(S["judges"]):
             raise FlowError("심사위원 정보를 찾을 수 없습니다. QR로 다시 접속해 주세요.")
@@ -305,10 +341,14 @@ def submit(token: str, team: int, vals: list, proxy: bool = False) -> float:
         if not eligible(S, seat["idx"], int(team)):
             raise FlowError("본인 관실 팀은 평가하지 않습니다.")
         if not proxy:
-            if current_team(st) != int(team):
-                raise FlowError("지금은 이 팀의 평가 시간이 아닙니다.")
-            if int(team) in st["closed"]:
+            if int(team) in st["closed"] or st["phase"] in ("done", "reveal"):
                 raise FlowError("이미 마감된 평가입니다.")
+            if S["score_mode"] == "sheet":
+                if not sheet_open(st, int(team)):
+                    raise FlowError("아직 발표 전인 팀입니다." if st["phase"] == "running" and int(team) in st["order"]
+                                    else "지금은 점수를 입력하는 시간이 아닙니다.")
+            elif current_team(st) != int(team):
+                raise FlowError("지금은 이 팀의 평가 시간이 아닙니다.")
         if len(vals) != len(S["criteria"]):
             raise FlowError("모든 항목을 입력해 주세요.")
         clean = []
@@ -332,6 +372,12 @@ def my_score(token: str, team: int) -> dict | None:
     return {"vals": json.loads(r["vals"]), "total": r["total"], "proxy": bool(r["proxy"])} if r else None
 
 
+def my_scores(token: str) -> dict:
+    """이 심사위원이 지금까지 넣은 점수 전부 {팀 번호: {...}} — 채점표 화면용."""
+    return {r["team"]: {"vals": json.loads(r["vals"]), "total": r["total"], "proxy": bool(r["proxy"])}
+            for r in _read("SELECT team, vals, total, proxy FROM scores WHERE token=?", (str(token),))}
+
+
 def delete_score(token: str, team: int):
     with _tx() as c:
         c.execute("DELETE FROM scores WHERE token=? AND team=?", (str(token), int(team)))
@@ -345,6 +391,44 @@ def submission_status(team: int) -> dict:
     el = eligible_judges(S, team)
     missing = [S["judges"][j]["dept"] for j in el if tok.get(j) not in done]
     return {"eligible": len(el), "submitted": len(el) - len(missing), "missing": missing}
+
+
+def final_status() -> dict:
+    """채점표 방식: 심사위원별 입력 수와 최종 제출 여부(관리자용)."""
+    S, st = get_settings(), get_state()
+    have: dict = {}
+    for r in _read("SELECT token, team FROM scores"):
+        have.setdefault(r["token"], set()).add(r["team"])
+    teams = st["order"] or list(range(len(S["teams"])))
+    rows = []
+    for r in _read("SELECT idx, token FROM seats ORDER BY idx"):
+        if r["idx"] >= len(S["judges"]):
+            continue
+        el = [t for t in teams if eligible(S, r["idx"], t)]
+        got = have.get(r["token"], set())
+        rows.append({"idx": r["idx"], "token": r["token"], "dept": S["judges"][r["idx"]]["dept"],
+                     "need": len(el), "done": sum(1 for t in el if t in got),
+                     "missing": [S["teams"][t]["name"] for t in el if t not in got],
+                     "final": r["token"] in st["final_ok"]})
+    return {"rows": rows, "final": sum(1 for x in rows if x["final"]), "total": len(rows)}
+
+
+def finalize(token: str):
+    """채점표 방식: 심사위원이 '최종 제출'을 누름. 모든 대상 팀 점수가 있어야 합니다."""
+    with _tx() as c:
+        S, st = normalize_settings(_get(c, "settings")), _st(c)
+        if st["phase"] != "final":
+            raise FlowError("모든 발표가 끝난 뒤에 최종 제출할 수 있습니다.")
+        seat = c.execute("SELECT idx FROM seats WHERE token=?", (str(token),)).fetchone()
+        if not seat or seat["idx"] >= len(S["judges"]):
+            raise FlowError("심사위원 정보를 찾을 수 없습니다. QR로 다시 접속해 주세요.")
+        got = {r["team"] for r in c.execute("SELECT team FROM scores WHERE token=?", (str(token),))}
+        missing = [S["teams"][t]["name"] for t in st["order"] if eligible(S, seat["idx"], t) and t not in got]
+        if missing:
+            raise FlowError(f"아직 점수를 넣지 않은 팀이 있습니다: {', '.join(missing)}")
+        if str(token) not in st["final_ok"]:
+            st["final_ok"].append(str(token))
+            _set_state(c, st)
 
 
 def fmt(x) -> str:
@@ -422,59 +506,82 @@ def _set_state(c, st):
 
 def draw_order() -> list[int]:
     with _tx() as c:
-        S, st = _get(c, "settings"), _get(c, "state")
+        S, st = _get(c, "settings"), _st(c)
         if st["phase"] not in ("lobby", "order"):
             raise FlowError("발표가 시작된 뒤에는 순서를 다시 뽑을 수 없습니다.")
         order = list(range(len(S["teams"])))
         secrets.SystemRandom().shuffle(order)
-        st.update(phase="order", order=order, drawn_at=time.time(), cur=0, step="presenting", closed=[])
+        st.update(phase="order", order=order, drawn_at=time.time(), cur=0, step="presenting", closed=[], final_ok=[])
         _set_state(c, st)
         return order
 
 
 def start():
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         if st["phase"] != "order":
             raise FlowError("먼저 발표 순서를 추첨해 주세요.")
-        st.update(phase="running", cur=0, step="presenting", closed=[])
+        st.update(phase="running", cur=0, step="presenting", closed=[], final_ok=[])
         _set_state(c, st)
 
 
 def request_scoring():
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         if st["phase"] != "running":
             raise FlowError("발표 진행 중이 아닙니다.")
         st["step"] = "scoring"
         _set_state(c, st)
 
 
+def _mode(c) -> str:
+    return normalize_settings(_get(c, "settings"))["score_mode"]
+
+
 def close_current():
-    """현재 팀 평가를 마감하고 다음 발표로 넘어갑니다. 마지막 팀이면 집계 단계로."""
+    """다음 발표로 넘어갑니다.
+    발표마다 마감(live): 현재 팀을 마감하고, 마지막 팀이면 집계 단계(done)로.
+    채점표(sheet): 마감하지 않고 넘어가며, 마지막 팀이면 최종 점수 확인 단계(final)로."""
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         if st["phase"] != "running":
             raise FlowError("발표 진행 중이 아닙니다.")
+        sheet = _mode(c) == "sheet"
         team = st["order"][st["cur"]]
-        if team not in st["closed"]:
+        if not sheet and team not in st["closed"]:
             st["closed"].append(team)
         if st["cur"] < len(st["order"]) - 1:
             st["cur"] += 1
             st["step"] = "presenting"
         else:
-            st["phase"] = "done"
+            st["phase"] = "final" if sheet else "done"
+            st["step"] = "scoring"
+        _set_state(c, st)
+
+
+def close_final():
+    """채점표 방식: 모든 점수를 최종 마감하고 집계 단계로."""
+    with _tx() as c:
+        st = _st(c)
+        if st["phase"] != "final":
+            raise FlowError("최종 점수 확인 단계가 아닙니다.")
+        st["closed"] = list(st["order"])
+        st["phase"] = "done"
         _set_state(c, st)
 
 
 def back():
     """한 단계 되돌리기 (실수로 넘겼을 때)."""
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         ph = st["phase"]
+        sheet = _mode(c) == "sheet"
         if ph == "reveal":
             st["phase"] = "done"
-        elif ph == "done":
+        elif ph == "done" and sheet:
+            st["phase"] = "final"           # 최종 마감을 풀어 다시 수정할 수 있게
+            st["closed"] = []
+        elif ph in ("done", "final"):
             st["phase"] = "running"
             st["cur"] = len(st["order"]) - 1
             st["step"] = "scoring"
@@ -499,7 +606,7 @@ def back():
 
 def set_winner_override(team: int | None):
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         st["winner_override"] = None if team is None else int(team)
         _set_state(c, st)
 
@@ -510,7 +617,7 @@ def reveal():
         raise FlowError("최우수 팀이 정해지지 않았습니다. 동점이면 먼저 최우수 팀을 선택해 주세요."
                         if r["top_tied"] else "집계할 점수가 없습니다.")
     with _tx() as c:
-        st = _get(c, "state")
+        st = _st(c)
         if st["phase"] not in ("done", "reveal"):
             raise FlowError("모든 발표의 평가가 마감된 뒤에 발표할 수 있습니다.")
         st.update(phase="reveal", revealed_at=time.time())
@@ -549,7 +656,10 @@ def snapshot(now: float | None = None) -> dict:
     sub = submission_status(cur) if cur is not None else None
     data = {"S": S, "st": st, "now": now, "judges": len(S["judges"]),
             "online": sum(1 for s in se if s["online"]), "claimed": sum(1 for s in se if s["claimed"]),
-            "seats": se, "cur": cur, "sub": sub, "winner": None, "top_tied": []}
+            "seats": se, "cur": cur, "sub": sub, "winner": None, "top_tied": [],
+            "mode": S["score_mode"], "presented": presented(st), "fin": None}
+    if st["phase"] == "final":
+        data["fin"] = final_status()
     if st["phase"] in ("done", "reveal"):
         r = ranking()
         data["winner"], data["top_tied"] = r["winner"], r["top_tied"]
@@ -590,11 +700,13 @@ def export_excel() -> bytes:
                                  + " · ".join(f'{c["name"]} {fmt(c["max"])}점' for c in S["criteria"])
                                  + (" — 평가기준: " + ", ".join(f'{g["name"]}({g["weight"]})' for g in S["guide"])
                                     if S["guide"] else "")},
+        {"항목": "입력 방식", "내용": "채점표 방식(마지막 발표까지 수정 가능, 모든 발표 후 최종 제출·마감)"
+                                 if S["score_mode"] == "sheet" else "발표마다 평가 후 마감"},
         {"항목": "집계 기준", "내용": f"팀별로 받은 점수의 평균 → 평균이 같으면 {top_label(S)}을 더 많이 받은 팀 우선"
                                  " → 그래도 같으면 심사위원장 결정"},
         {"항목": "최우수", "내용": next((r["name"] for r in R["rows"] if r["team"] == R["winner"]), "미정")},
         {"항목": "익명 처리", "내용": "심사위원별 점수는 기록하지 않고 팀별로 받은 점수만 정리"},
-        {"항목": "생성 시각", "내용": time.strftime("%Y-%m-%d %H:%M", time.localtime())},
+        {"항목": "생성 시각", "내용": time.strftime("%Y-%m-%d %H:%M", time.gmtime(time.time() + 9 * 3600)) + " (한국 시간)"},
     ])
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as w:

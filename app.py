@@ -7,6 +7,7 @@
 """
 from __future__ import annotations
 
+import json
 import time
 
 import pandas as pd
@@ -52,9 +53,6 @@ JUDGE_CSS = """<style>
 .jx-order li em{font-style:normal;display:inline-block;width:1.6rem;color:#7fb0ff;font-weight:800}
 div[data-testid="stButton"] button{min-height:3.3rem;font-size:1.1rem!important;font-weight:700;border-radius:12px}
 div[data-testid="stButton"] button p{font-size:1.1rem!important}
-div[data-testid="stButtonGroup"]>div,div[data-testid="stButtonGroup"] div:has(> button){flex-wrap:wrap!important;gap:.5rem!important;width:100%}
-div[data-testid="stButtonGroup"] button{flex:1 1 100%!important;min-height:3.5rem;border-radius:12px!important;margin:0!important}
-div[data-testid="stButtonGroup"] button p{font-size:1.15rem!important;font-weight:700}
 .jx-note{color:#b9c6e4;font-size:1rem;margin:.2rem 0 .4rem;word-break:keep-all}
 .jx-guide .gd{padding:.6rem 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .jx-guide .gd:last-child{border-bottom:0}
@@ -62,6 +60,39 @@ div[data-testid="stButtonGroup"] button p{font-size:1.15rem!important;font-weigh
 .jx-guide .gd b span{color:#7fb0ff;font-weight:700;margin-left:.35rem}
 .jx-guide .gd div{color:#c9d4ec;font-size:.98rem;line-height:1.55;padding-left:.6rem;word-break:keep-all}
 div[data-testid="stNumberInput"] input{font-size:1.3rem;min-height:3rem}
+</style>"""
+
+# 발표마다 마감(live): 등급 버튼을 한 줄에 하나씩 크게
+LIVE_BTN_CSS = """<style>
+div[data-testid="stButtonGroup"]>div,div[data-testid="stButtonGroup"] div:has(> button){flex-wrap:wrap!important;gap:.5rem!important;width:100%}
+div[data-testid="stButtonGroup"] button{flex:1 1 100%!important;min-height:3.5rem;border-radius:12px!important;margin:0!important}
+div[data-testid="stButtonGroup"] button p{font-size:1.15rem!important;font-weight:700}
+</style>"""
+
+# 채점표(sheet): 팀마다 5·4·3·2·1 버튼을 한 줄로
+SHEET_CSS = """<style>
+div[data-testid="stButtonGroup"]>div,div[data-testid="stButtonGroup"] div:has(> button){flex-wrap:nowrap!important;gap:.4rem!important;width:100%}
+div[data-testid="stButtonGroup"] button{flex:1 1 0!important;min-width:0!important;min-height:3.4rem;border-radius:12px!important;margin:0!important;padding:0 .2rem!important}
+div[data-testid="stButtonGroup"] button p{font-size:1.2rem!important;font-weight:800;white-space:nowrap}
+.jx-legend{display:flex;flex-wrap:wrap;gap:.25rem .9rem;font-size:.95rem;color:#b9c6e4;margin:.3rem 0 .2rem;padding:.6rem .8rem;border-radius:12px;background:rgba(255,255,255,.05)}
+.jx-legend b{color:#fff;margin-right:.15rem}
+.jx-save{font-size:.95rem;color:#9fe6c4;margin:.5rem 0 .2rem;word-break:keep-all}
+.jx-row{display:flex;align-items:flex-start;gap:.7rem;margin:1.15rem 0 .5rem;padding-top:1rem;border-top:1px solid rgba(255,255,255,.1)}
+.jx-row .no{flex:none;width:2rem;height:2rem;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:1rem;background:rgba(255,255,255,.1);color:#cfe0ff}
+.jx-row.cur .no{background:#4f8bff;color:#fff}
+.jx-row .nm{flex:1;min-width:0}
+.jx-row .nm b{display:block;font-size:1.18rem;color:#fff;line-height:1.3;word-break:keep-all}
+.jx-row .nm small{display:block;color:#8ea3cf;font-size:.88rem;margin-top:.15rem;line-height:1.35;word-break:keep-all}
+.jx-row .pl{flex:none;padding:.22rem .65rem;border-radius:99px;font-size:.88rem;font-weight:700;white-space:nowrap;margin-top:.1rem}
+.jx-row .pl.ok{background:rgba(61,220,151,.18);color:#6ff0b3}
+.jx-row .pl.now{background:rgba(79,139,255,.28);color:#dbe7ff}
+.jx-row .pl.todo{background:rgba(255,184,77,.18);color:#ffc777}
+.jx-row .pl.wait,.jx-row .pl.ex{background:rgba(255,255,255,.08);color:#9aa8c7}
+.jx-off{color:#7d8bab;font-size:.95rem;padding:0 0 .3rem 2.7rem;word-break:keep-all}
+.jx-prog{display:flex;justify-content:space-between;align-items:baseline;margin:1.6rem 0 .6rem;padding:.9rem 1.1rem;border-radius:14px;background:rgba(79,139,255,.14);border:1px solid rgba(79,139,255,.35)}
+.jx-prog span{color:#cfe0ff;font-weight:600}
+.jx-prog b{font-size:1.6rem;color:#fff;font-weight:900}
+.jx-prog b small{font-size:1rem;color:#9fb3dc;font-weight:600;margin-left:.2rem}
 </style>"""
 
 ADMIN_CSS = """<style>
@@ -75,7 +106,13 @@ ADMIN_CSS = """<style>
 </style>"""
 
 PHASE_KO = {"lobby": "추첨 전 (접속 대기)", "order": "순서 추첨 완료", "running": "발표 진행 중",
-            "done": "모든 평가 마감 · 결과 발표 대기", "reveal": "최우수 발표 완료"}
+            "final": "모든 발표 종료 · 최종 점수 확인 중", "done": "모든 평가 마감 · 결과 발표 대기",
+            "reveal": "최우수 발표 완료"}
+
+
+def kst(fmt: str) -> str:
+    """한국 시간 (서버는 UTC로 돌아갑니다)."""
+    return time.strftime(fmt, time.gmtime(time.time() + 9 * 3600))
 
 
 def md(html: str):
@@ -117,21 +154,22 @@ def who(dept: str) -> str:
     return f"{d} 과장님"
 
 
-def autofill(S, team) -> int:
-    """리허설용: 아직 제출하지 않은 심사위원의 점수를 무작위로 채웁니다."""
+def autofill(S, teams) -> int:
+    """리허설용: 아직 점수가 없는 칸을 무작위로 채웁니다. 몇 칸 채웠는지 돌려줍니다."""
     import random
     rng = random.Random()
     n = 0
-    for s_ in core.seats():
-        if not core.eligible(S, s_["idx"], team) or core.my_score(s_["token"], team):
-            continue
-        vals = []
-        for c in S["criteria"]:
-            opts = grade_options(S, c)
-            weights = [.3, .4, .2, .07, .03][:len(opts)] if len(opts) <= 5 else None
-            vals.append(rng.choices(opts, weights=weights)[0])
-        core.submit(s_["token"], team, vals, proxy=True)
-        n += 1
+    for team in ([teams] if isinstance(teams, int) else teams):
+        for s_ in core.seats():
+            if not core.eligible(S, s_["idx"], team) or core.my_score(s_["token"], team):
+                continue
+            vals = []
+            for c in S["criteria"]:
+                opts = grade_options(S, c)
+                weights = [.3, .4, .2, .07, .03][:len(opts)] if len(opts) <= 5 else None
+                vals.append(rng.choices(opts, weights=weights)[0])
+            core.submit(s_["token"], team, vals, proxy=True)
+            n += 1
     return n
 
 
@@ -224,6 +262,129 @@ def seat_picker():
             st.rerun()
 
 
+def guide_box(S):
+    if S["guide"]:
+        summary = " · ".join(f'{g["name"]} {g["weight"]}' for g in S["guide"])
+        with st.expander(f"평가기준 보기 ({summary})"):
+            md('<div class="jx jx-guide">' + "".join(
+                f'<div class="gd"><b>{screens.esc(g["name"])}<span>{screens.esc(g["weight"])}</span></b>'
+                + "".join(f"<div>· {screens.esc(x)}</div>" for x in g["items"]) + "</div>"
+                for g in S["guide"]) + "</div>")
+    if S["guide_note"]:
+        md(f'<div class="jx jx-note">{screens.esc(S["guide_note"])}</div>')
+
+
+def _sheet_key(team, k):
+    return f"sh_{team}_{k}"
+
+
+def _sheet_save(token, team):
+    """채점표에서 버튼을 누르는 순간 서버에 저장합니다(별도 '제출' 없음)."""
+    S = core.get_settings()
+    vals = [st.session_state.get(_sheet_key(team, k)) for k in range(len(S["criteria"]))]
+    if any(v is None for v in vals):
+        return   # 다시 눌러 선택을 지운 경우 등 → 저장된 점수는 그대로 두고 화면만 되돌립니다
+    try:
+        core.submit(token, team, vals)
+        st.session_state["sheet_err"] = None
+    except core.FlowError as e:
+        st.session_state["sheet_err"] = (team, str(e))
+
+
+def sheet_view(S, stt, judge):
+    """채점표 방식: 발표가 시작된 팀은 마지막 최종 마감 전까지 언제든 입력·수정. 누르면 바로 저장."""
+    ph, order, tok = stt["phase"], stt["order"], judge["token"]
+    n = len(order)
+    if ph == "running":
+        t = order[stt["cur"]]
+        info = S["teams"][t]
+        meta = " · ".join(x for x in [info["dept"], info["topic"]] if x)
+        step = "발표 중" if stt["step"] == "presenting" else "점수 입력 시간"
+        md(f'<div class="jx jx-card"><div class="ey">지금 · 발표 {stt["cur"] + 1} / {n} · {step}</div>'
+           f'<div class="tm">{screens.esc(info["name"])}</div>'
+           f'{f"<div class=mt>{screens.esc(meta)}</div>" if meta else ""}</div>')
+    else:   # final
+        md('<div class="jx jx-card"><div class="ey">모든 발표가 끝났습니다</div>'
+           '<div class="jx-msg" style="margin-top:.4rem">아래 점수를 한 번 더 확인하시고, 바꾸실 점수가 있으면 고친 뒤 '
+           '맨 아래 <b>최종 제출</b>을 눌러 주세요.</div></div>')
+    guide_box(S)
+    if S["input_mode"] == "grade" and len(S["criteria"]) == 1:
+        c0 = S["criteria"][0]
+        md('<div class="jx jx-legend">' + "".join(
+            f'<span><b>{core.fmt(v)}점</b>{screens.esc(grade_label(S, c0, v))}</span>' for v in grade_options(S, c0)) + "</div>")
+    md('<div class="jx jx-save">✔ 누르는 즉시 저장됩니다. 마지막 발표가 끝날 때까지 언제든 바꿀 수 있고, '
+       '화면을 닫았다가 QR을 다시 찍어도 그대로 남아 있습니다.</div>')
+
+    mine = core.my_scores(tok)
+    err = st.session_state.get("sheet_err")
+    need = done = 0
+    for i, t in enumerate(order):
+        info = S["teams"][t]
+        is_open = core.sheet_open(stt, t)
+        el = core.eligible(S, judge["idx"], t)
+        cur = ph == "running" and i == stt["cur"]
+        if not el:
+            pill = '<span class="pl ex">평가 제외</span>'
+        elif t in mine:
+            v = mine[t]
+            lab = grade_label(S, S["criteria"][0], v["vals"][0]) if len(S["criteria"]) == 1 else ""
+            pill = f'<span class="pl ok">✓ {core.fmt(v["total"])}점{" · " + screens.esc(lab) if lab else ""}</span>'
+        elif cur and stt["step"] == "presenting":
+            pill = '<span class="pl now">발표 중</span>'
+        elif is_open:
+            pill = '<span class="pl todo">입력 전</span>'
+        else:
+            pill = '<span class="pl wait">발표 전</span>'
+        sub = " · ".join(x for x in [info["dept"], info["topic"]] if x)
+        md(f'<div class="jx jx-row{" cur" if cur else ""}"><div class="no">{i + 1}</div>'
+           f'<div class="nm"><b>{screens.esc(info["name"])}</b>{f"<small>{screens.esc(sub)}</small>" if sub else ""}</div>{pill}</div>')
+        if not el:
+            md('<div class="jx jx-off">본인 관실 팀이라 평가하지 않습니다.</div>')
+            continue
+        need += 1
+        done += t in mine
+        if not is_open:
+            md('<div class="jx jx-off">발표가 시작되면 입력할 수 있습니다.</div>')
+            continue
+        for k, crit in enumerate(S["criteria"]):
+            key = _sheet_key(t, k)
+            if t in mine:   # 서버에 저장된 값을 화면에 그대로 보여 줍니다(다른 기기·재접속에서도 같음)
+                st.session_state[key] = mine[t]["vals"][k]
+            if len(S["criteria"]) > 1:
+                md(f'<div class="jx jx-note">{screens.esc(crit["name"])} ({core.fmt(crit["max"])}점)</div>')
+            if S["input_mode"] == "grade":
+                opts = grade_options(S, crit)
+                if st.session_state.get(key) not in opts:
+                    st.session_state[key] = None
+                st.segmented_control(f'{info["name"]} {crit["name"]}', opts, key=key,
+                                     format_func=lambda v: f"{core.fmt(v)}점", on_change=_sheet_save, args=(tok, t),
+                                     label_visibility="collapsed")
+            else:
+                extra = {} if key in st.session_state else {"value": None}
+                st.number_input(f'{info["name"]} {crit["name"]}', min_value=0.0, max_value=float(crit["max"]), step=1.0,
+                                key=key, placeholder=f"0 ~ {core.fmt(crit['max'])}",
+                                on_change=_sheet_save, args=(tok, t), label_visibility="collapsed", **extra)
+        if err and err[0] == t:
+            st.error(err[1])
+
+    md(f'<div class="jx jx-prog"><span>입력한 팀</span><b>{done}<small>/ {need}팀</small></b></div>')
+    if ph == "final":
+        missing = [S["teams"][t]["name"] for t in order if core.eligible(S, judge["idx"], t) and t not in mine]
+        if tok in stt["final_ok"]:
+            st.success("최종 제출을 마쳤습니다. 감사합니다. 최종 마감 전까지는 점수를 바꾸시면 바로 반영됩니다.")
+        elif missing:
+            st.warning(f"아직 점수를 넣지 않은 팀이 있습니다: {', '.join(missing)}")
+        else:
+            if st.button("최종 제출", type="primary", use_container_width=True, key="final_submit"):
+                try:
+                    core.finalize(tok)
+                    st.rerun(scope="fragment")
+                except core.FlowError as e:
+                    st.error(str(e))
+    else:
+        md('<div class="jx jx-note">마지막 발표가 끝나면 이 자리에 <b>최종 제출</b> 버튼이 나타납니다.</div>')
+
+
 def judge_view():
     token = st.query_params.get("j")
     judge = core.judge_by_token(token)
@@ -238,8 +399,10 @@ def judge_view():
     def live():
         core.touch(judge["token"])
         S, stt = core.get_settings(), core.get_state()
+        sheet = S["score_mode"] == "sheet"
+        md(SHEET_CSS if sheet else LIVE_BTN_CSS)
         md(f'<div class="jx jx-head"><small>{screens.esc(S["title_top"])} {screens.esc(S["title_main"])}</small>'
-           f'<b>심사위원 화면</b><span class="jx-who">{screens.esc(who(judge["dept"]))}</span></div>')
+           f'<b>{"채점표" if sheet else "심사위원 화면"}</b><span class="jx-who">{screens.esc(who(judge["dept"]))}</span></div>')
         ph = stt["phase"]
         order_html = ""
         if stt["order"]:
@@ -247,13 +410,14 @@ def judge_view():
                             f'{" · 평가 제외(본인 관실)" if not core.eligible(S, judge["idx"], t) else ""}</li>'
                             for i, t in enumerate(stt["order"]))
             order_html = f'<ul class="jx-order">{items}</ul>'
+        appear = "채점표가" if sheet else "발표마다 평가 화면이"
         if ph == "lobby":
             md('<div class="jx jx-card"><div class="jx-msg">접속되었습니다. 감사합니다.<br>'
-               '곧 <b>발표 순서 추첨</b>이 진행됩니다. 이 화면을 켜 두시면 발표마다 평가 화면이 자동으로 나타납니다.</div></div>')
+               f'곧 <b>발표 순서 추첨</b>이 진행됩니다. 이 화면을 켜 두시면 {appear} 자동으로 나타납니다.</div></div>')
             return
         if ph == "order":
             md(f'<div class="jx jx-card"><div class="ey">발표 순서</div>{order_html}</div>'
-               '<div class="jx jx-msg">첫 발표가 시작되면 평가 화면이 자동으로 나타납니다.</div>')
+               f'<div class="jx jx-msg">첫 발표가 시작되면 {"채점표" if sheet else "평가 화면"}가 자동으로 나타납니다.</div>')
             return
         if ph in ("done", "reveal"):
             msg = "모든 평가가 끝났습니다. 수고 많으셨습니다."
@@ -262,6 +426,9 @@ def judge_view():
                 if snap["winner"] is not None:
                     msg += f'<br><br>최우수상: <b>{screens.esc(S["teams"][snap["winner"]]["name"])}</b>'
             md(f'<div class="jx jx-card"><div class="jx-msg">{msg}</div></div>')
+            return
+        if sheet and ph in ("running", "final"):
+            sheet_view(S, stt, judge)
             return
         team = core.current_team(stt)
         if team is None:
@@ -280,15 +447,7 @@ def judge_view():
         if team in stt["closed"]:
             md('<div class="jx jx-card"><div class="jx-msg">이 팀의 평가는 마감되었습니다.</div></div>')
             return
-        if S["guide"]:
-            summary = " · ".join(f'{g["name"]} {g["weight"]}' for g in S["guide"])
-            with st.expander(f"평가기준 보기 ({summary})"):
-                md('<div class="jx jx-guide">' + "".join(
-                    f'<div class="gd"><b>{screens.esc(g["name"])}<span>{screens.esc(g["weight"])}</span></b>'
-                    + "".join(f"<div>· {screens.esc(x)}</div>" for x in g["items"]) + "</div>"
-                    for g in S["guide"]) + "</div>")
-        if S["guide_note"]:
-            md(f'<div class="jx jx-note">{screens.esc(S["guide_note"])}</div>')
+        guide_box(S)
         vals = score_inputs(S, team, "s", existing=mine)
         picked = [v for v in vals if v is not None]
         max_total = sum(c["max"] for c in S["criteria"])
@@ -416,9 +575,12 @@ def progress_panel():
             if stt["order"]:
                 chips = []
                 for i, t in enumerate(stt["order"]):
-                    cls = "done" if t in stt["closed"] else ("now" if stt["phase"] == "running" and i == stt["cur"] else "off")
+                    cls = ("now" if stt["phase"] == "running" and i == stt["cur"]
+                           else "done" if t in snap["presented"] else "off")
                     chips.append(f'<span class="ad-pill {cls}">{i + 1}. {screens.esc(S["teams"][t]["name"])}</span>')
                 md('<div style="margin-top:.6rem">' + "".join(chips) + "</div>")
+            st.caption("평가 방식: " + ("채점표 (마지막 발표까지 수정 가능 → 모든 발표 후 최종 제출·마감)"
+                                      if snap["mode"] == "sheet" else "발표마다 평가 후 마감"))
         with c2:
             st.caption(f"심사위원 접속 {snap['online']} / {snap['judges']}")
             md("".join(f'<span class="ad-pill {"on" if s["online"] else "off"}">{screens.esc(s["dept"])}</span>'
@@ -437,6 +599,46 @@ def progress_panel():
                     st.rerun(scope="fragment")
             if confirm_button("순서 다시 추첨", "redraw", "지금 순서를 버리고 다시 추첨합니다."):
                 if act(core.draw_order):
+                    st.rerun(scope="fragment")
+        elif ph == "running" and snap["mode"] == "sheet":
+            t = snap["cur"]
+            sub = snap["sub"]
+            md(f'<div class="ad-big">{stt["cur"] + 1}번째 · {screens.esc(S["teams"][t]["name"])}</div>')
+            st.write(f"이 팀 점수 입력 {sub['submitted']} / {sub['eligible']}"
+                     + (f" · 아직: {', '.join(sub['missing'])}" if sub["missing"] else " · 모두 입력"))
+            last = stt["cur"] == len(stt["order"]) - 1
+            if stt["step"] == "presenting":
+                st.caption("발표 중에도 심사위원은 채점표에 입력할 수 있습니다. 발표가 끝나면 아래 버튼을 누르세요.")
+                if st.button("발표 종료 · 점수 입력 시간", type="primary", use_container_width=True, key="req"):
+                    if act(core.request_scoring):
+                        st.rerun(scope="fragment")
+            else:
+                st.caption("채점표 방식이라 여기서 마감하지 않습니다. 심사위원은 마지막 최종 마감 전까지 이 팀 점수를 계속 고칠 수 있습니다. "
+                           "입력을 잠깐 기다린 뒤 넘어가세요.")
+                label = "모든 발표 종료 · 최종 점수 확인으로" if last else "▶ 다음 발표 시작"
+                if st.button(label, type="primary", use_container_width=True, key=f"next_{t}"):
+                    if act(core.close_current):
+                        st.rerun(scope="fragment")
+        elif ph == "final":
+            fs = snap["fin"] or core.final_status()
+            md(f'<div class="ad-big">최종 제출 {fs["final"]} / {fs["total"]}</div>')
+            st.caption("심사위원 휴대폰에 '최종 제출' 버튼이 나와 있습니다. 모두 제출하면 최종 마감하세요. "
+                       "점수를 못 넣은 팀이 있는 분은 [대리 입력] 탭에서 넣을 수 있습니다.")
+            pills = []
+            for r in fs["rows"]:
+                state = "✓ 제출" if r["final"] else f'{r["done"]}/{r["need"]}팀 입력'
+                pills.append(f'<span class="ad-pill {"on" if r["final"] else "off"}">{screens.esc(r["dept"])} {state}</span>')
+            md("".join(pills))
+            waiting = [r for r in fs["rows"] if not r["final"]]
+            if waiting:
+                names = ", ".join(r["dept"] + (f"(미입력: {'·'.join(r['missing'])})" if r["missing"] else "") for r in waiting)
+                if confirm_button("최종 마감 · 결과 집계", "close_final",
+                                  f"아직 최종 제출하지 않은 분이 있습니다: {names}. 그래도 마감할까요? "
+                                  "(마감하면 심사위원은 더 이상 점수를 바꿀 수 없습니다)", "primary"):
+                    if act(core.close_final):
+                        st.rerun(scope="fragment")
+            elif st.button("최종 마감 · 결과 집계", type="primary", use_container_width=True, key="close_final_ok"):
+                if act(core.close_final):
                     st.rerun(scope="fragment")
         elif ph == "running":
             t = snap["cur"]
@@ -488,6 +690,15 @@ def progress_panel():
                 k = autofill(S, snap["cur"])
                 st.toast(f"{k}명 점수를 자동으로 채웠습니다")
                 st.rerun(scope="fragment")
+        if ph == "final" and S.get("rehearsal"):
+            st.write("")
+            if st.button("🧪 빈 점수 채우고 전원 최종 제출 (리허설용)", use_container_width=True, key="autofill_final"):
+                k = autofill(S, stt["order"])
+                for r in core.final_status()["rows"]:
+                    if not r["final"]:
+                        act(core.finalize, r["token"])
+                st.toast(f"{k}칸을 채우고 전원 최종 제출했습니다")
+                st.rerun(scope="fragment")
         if ph != "lobby":
             st.write("")
             if confirm_button("◀ 한 단계 되돌리기", "back", "직전 단계로 돌아갑니다. 마감한 팀은 다시 입력할 수 있게 열립니다."):
@@ -495,6 +706,7 @@ def progress_panel():
                     st.rerun(scope="fragment")
 
     live()
+    backup_box("pg")
     url = base_url()
     if url:
         st.link_button("스크린 화면 열기 (새 창 → 프로젝터로)", f"{url}/?view=screen", use_container_width=True)
@@ -507,9 +719,31 @@ def progress_panel():
         st.rerun()
 
 
+def backup_box(where: str):
+    """지금 시점의 백업 파일. 탭을 옮겨도 예전 데이터가 남지 않도록 '최신으로'를 누르면 새로 만듭니다."""
+    @st.fragment
+    def box():
+        raw = core.backup()
+        try:
+            n = len(json.loads(raw)["scores"])
+        except Exception:
+            n = 0
+        made = kst("%H:%M:%S")
+        c1, c2 = st.columns([3, 1])
+        c1.download_button(f"💾 백업 파일 내려받기 ({made} 기준 · 점수 {n}건)", raw,
+                           file_name=f"심사_백업_{kst('%m%d_%H%M%S')}.json", mime="application/json",
+                           use_container_width=True, key=f"bk_dl_{where}")
+        if c2.button("🔄 최신으로", use_container_width=True, key=f"bk_re_{where}"):
+            st.rerun(scope="fragment")
+        st.caption("서버가 다시 켜지면 점수가 사라질 수 있습니다. 발표 2팀마다 '최신으로' → '내려받기'를 눌러 두세요.")
+    box()
+
+
 def results_panel():
     st.caption("기획팀 확인용입니다. 스크린과 심사위원 화면에는 최우수 팀만 나옵니다. 심사위원별 점수는 어디에도 표시하지 않습니다.")
     S = core.get_settings()
+    if S["score_mode"] == "sheet" and core.get_state()["phase"] in ("running", "final"):
+        st.info("채점표 방식이라 최종 마감 전까지 심사위원이 점수를 바꿀 수 있습니다. 아래는 지금 시점의 중간 집계입니다.")
     st.button("새로고침", key="res_refresh")
     R = core.ranking()
     if not any(r["n"] for r in R["rows"]):
@@ -525,7 +759,7 @@ def results_panel():
     if R["top_tied"]:
         st.warning("1위 동점이 있습니다. [진행] 탭에서 최우수 팀을 정해 주세요.")
     st.download_button("결과 엑셀 내려받기 (익명)", core.export_excel(),
-                       file_name=f"정보분석경진대회_심사결과_{time.strftime('%Y%m%d_%H%M')}.xlsx",
+                       file_name=f"정보분석경진대회_심사결과_{kst('%Y%m%d_%H%M')}.xlsx",
                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                        use_container_width=True)
     st.caption(f"집계: 팀별 평균 → 같으면 {core.top_label(S)}을 더 많이 받은 팀 → 그래도 같으면 심사위원장 결정")
@@ -673,6 +907,10 @@ def settings_panel():
             "평가기준 (한 줄에 한 지표: 지표명 | 배점 | 내용1 / 내용2 / …)",
             "\n".join(f'{g["name"]} | {g["weight"]} | ' + " / ".join(g["items"]) for g in S["guide"]),
             height=130, help="심사위원 휴대폰의 '평가기준 보기'에 그대로 나옵니다. 점수 계산에는 쓰이지 않습니다.")
+        smode = st.radio("평가 방식", ["sheet", "live"], index=0 if S["score_mode"] == "sheet" else 1, horizontal=True,
+                         format_func=lambda m: ("채점표 — 마지막 발표까지 수정 가능, 모든 발표 후 최종 제출 (권장)" if m == "sheet"
+                                                else "발표마다 평가하고 바로 마감"),
+                         help="발표 진행 중에는 바꿀 수 없습니다.")
         runners = st.checkbox("최우수 발표 화면에 우수상 팀도 함께 표시", S["show_runner_ups"])
         c7, c8 = st.columns([1, 2])
         snd = c7.checkbox("🔊 스크린 효과음·음악", S.get("sound", True),
@@ -704,7 +942,7 @@ def settings_panel():
                     guide.append({"name": parts[0], "weight": parts[1] if len(parts) > 1 else "",
                                   "items": [x.strip() for x in (parts[2] if len(parts) > 2 else "").split("/") if x.strip()]})
             new = dict(S, guide=guide, guide_note=guide_note, title_top=title_top, title_main=title_main, date_line=date_line, public_url=public_url,
-                       input_mode=mode, trim_high_low=False, show_runner_ups=runners, rehearsal=rehearsal, sound=snd, volume=vol, admin_pin=pin, judge_code=jcode,
+                       input_mode=mode, score_mode=smode, trim_high_low=False, show_runner_ups=runners, rehearsal=rehearsal, sound=snd, volume=vol, admin_pin=pin, judge_code=jcode,
                        grade_labels=labels or S["grade_labels"], grade_ratio=ratios or S["grade_ratio"],
                        teams=[{"name": r.get("팀명", ""), "dept": r.get("소속 관실", ""), "topic": r.get("정보분석명", "")}
                               for r in teams.fillna("").to_dict("records") if str(r.get("팀명", "")).strip()],
@@ -722,9 +960,7 @@ def settings_panel():
 
 def data_panel():
     st.markdown("**백업** — 행사 중간중간 내려받아 두면, 서버가 재시작되어도 그대로 되살릴 수 있습니다.")
-    st.download_button("현재 상태 백업 파일 내려받기", core.backup(),
-                       file_name=f"심사_백업_{time.strftime('%H%M%S')}.json", mime="application/json",
-                       use_container_width=True)
+    backup_box("data")
     up = st.file_uploader("백업 파일로 되살리기", type=["json"], key="restore")
     if up is not None and st.button("이 백업으로 되살리기", type="primary", key="do_restore"):
         try:

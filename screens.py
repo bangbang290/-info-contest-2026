@@ -139,6 +139,9 @@ header[data-testid="stHeader"],[data-testid="stToolbar"],[data-testid="stDecorat
 .kx .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
 .kx .center h2{font-size:5.2rem;font-weight:900;margin:0;letter-spacing:-.045em}
 .kx .center p{font-size:2rem;color:rgba(214,224,245,.78);margin:1.6rem 0 0}
+.kx .center p b{color:#fff}
+.kx .fin{margin-top:4.2rem;display:flex;flex-direction:column;align-items:center}
+.kx .fin .bar{margin-top:1.8rem}
 .kx .dots3 span{display:inline-block;animation:blink 1.4s infinite both}
 .kx .dots3 span:nth-child(2){animation-delay:.2s}.kx .dots3 span:nth-child(3){animation-delay:.4s}
 .kx .spk{position:absolute;opacity:0;animation-name:twinkle;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-fill-mode:both}
@@ -215,7 +218,7 @@ def _top(snap, chips=True) -> str:
         return f'<div class="top">{brand}</div>'
     out = []
     for i, t in enumerate(st["order"]):
-        cls = "done" if t in st["closed"] else ("now" if st["phase"] == "running" and i == st["cur"] else "")
+        cls = "now" if st["phase"] == "running" and i == st["cur"] else ("done" if t in snap["presented"] else "")
         out.append(f'<div class="chip {cls}"><em>{"✓" if cls == "done" else i + 1}</em>{esc(S["teams"][t]["name"])}</div>')
     return f'<div class="top">{brand}<div class="chips">{"".join(out)}</div></div>'
 
@@ -264,9 +267,10 @@ def _running(snap, judge_url) -> str:
         sub = snap["sub"] or {"submitted": 0, "eligible": 0}
         pct = 100 * sub["submitted"] / max(1, sub["eligible"])
         full = sub["submitted"] >= sub["eligible"] > 0
-        stat = (f'<div class="sc-label"><i></i>심사위원 평가 입력 중</div>'
+        sheet = snap.get("mode") == "sheet"
+        stat = (f'<div class="sc-label"><i></i>{"심사위원 채점표 입력 중" if sheet else "심사위원 평가 입력 중"}</div>'
                 f'<div class="sc-num">{sub["submitted"]}<small>/ {sub["eligible"]}</small>'
-                f'<span>{"모두 제출했습니다" if full else "제출"}</span></div>'
+                f'<span>{("모두 입력했습니다" if sheet else "모두 제출했습니다") if full else ("입력" if sheet else "제출")}</span></div>'
                 f'<div class="bar"><i class="{"full" if full else ""}" style="width:{pct:.1f}%"></i></div>')
     else:
         stat = '<div class="live"><i></i>발표 중</div>'
@@ -274,6 +278,18 @@ def _running(snap, judge_url) -> str:
 <div class="run"><div class="eyebrow">발표 {st["cur"] + 1} / {len(st["order"])}</div>
 <div class="team" style="{fit(team["name"], 8.6, 84)}">{esc(team["name"])}</div>{f'<div class="meta">{meta}</div>' if meta else ""}</div>
 <div class="stat">{stat}</div>'''
+
+
+def _final(snap) -> str:
+    """채점표 방식: 모든 발표 후 심사위원 최종 제출을 기다리는 화면."""
+    f = snap.get("fin") or {"final": 0, "total": 0}
+    full = f["final"] >= f["total"] > 0
+    pct = 100 * f["final"] / max(1, f["total"])
+    return f'''{_top(snap)}
+<div class="center"><h2>모든 발표가 끝났습니다</h2>
+<p>심사위원께서 채점표를 확인하고 <b>최종 제출</b>을 하고 계십니다</p>
+<div class="fin"><div class="sc-num">{f["final"]}<small>/ {f["total"]}</small><span>{"모두 제출했습니다" if full else "최종 제출"}</span></div>
+<div class="bar"><i class="{"full" if full else ""}" style="width:{pct:.1f}%"></i></div></div></div>'''
 
 
 def _done(snap) -> str:
@@ -362,6 +378,10 @@ def _sound_marker(snap) -> str:
             parts = ["scoring", st["cur"], sub["submitted"], sub["eligible"], 0]
         else:
             parts = ["present", st["cur"], 0, 0, 0]
+    elif ph == "final":
+        # 마지막 팀 '입력 중' 음악을 끊지 않고 이어 가고, 전원 최종 제출하면 '띵동'
+        f = snap.get("fin") or {"final": 0, "total": 0}
+        parts = ["scoring", st["cur"], f["final"], f["total"], 0]
     elif ph == "reveal" and snap["winner"] is not None:
         e = now - st["revealed_at"]
         parts = ["reveal", f'{st["revealed_at"]:.3f}', "sus" if e < REVEAL_SUSPENSE else "win", 0, f"{e:.1f}"]
@@ -380,6 +400,8 @@ def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
         body = _order(snap)
     elif ph == "running" and snap["cur"] is not None:
         body = _running(snap, judge_url)
+    elif ph == "final":
+        body = _final(snap)
     elif ph == "done":
         body = _done(snap)
     elif ph == "reveal":

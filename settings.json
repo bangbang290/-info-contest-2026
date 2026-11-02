@@ -8,8 +8,11 @@
   "input_mode": "grade",
   "grade_labels": ["매우우수", "우수", "보통", "미흡", "매우미흡"],
   "grade_ratio": [1.0, 0.8, 0.6, 0.4, 0.2],
-  "trim_high_low": true,
+  "trim_high_low": false,
+  "score_mode": "sheet",
   "show_runner_ups": false,
+  "sound": true,
+  "volume": 70,
   "criteria": [
     {"name": "종합점수", "max": 5}
   ],
