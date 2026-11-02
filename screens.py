@@ -393,6 +393,16 @@ def _sound_marker(snap) -> str:
     return f'<i class="kx-sc" title="{"|".join(str(x) for x in parts)}" style="display:none"></i>'
 
 
+def _win_marker(snap) -> str:
+    """발표화면 자동 전환 도우미(이 PC의 스크립트)가 읽는 숨은 표시: 발표 중이면 P|팀명, 아니면 S|"""
+    st = snap["st"]
+    if st["phase"] == "running" and st["step"] == "presenting" and snap["cur"] is not None:
+        val = "P|" + str(snap["S"]["teams"][snap["cur"]]["name"])
+    else:
+        val = "S|"
+    return f'<i class="kx-win" title="{esc(val)}" style="display:none"></i>'
+
+
 def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
     st = snap["st"]
     ph, now = st["phase"], snap["now"]
@@ -408,4 +418,4 @@ def render(snap: dict, judge_url: str, local_warn: bool = False) -> str:
         body = _reveal(snap)
     else:
         body = _lobby(snap, judge_url, local_warn)
-    return _one(f'<div class="kx"><div class="bg"></div>{body}{_sound_marker(snap)}</div>')
+    return _one(f'<div class="kx"><div class="bg"></div>{body}{_sound_marker(snap)}{_win_marker(snap)}</div>')

@@ -467,9 +467,29 @@ ENGINE_JS = r"""
     return { scene: p[0], key: p[1], a: (a === 'sus' || a === 'win') ? a : (+a || 0), b: +p[3] || 0,
              e: +p[4] || 0, snd: p[5] === '1', vol: Math.max(0, Math.min(100, +p[6] || 0)) / 100 };
   }
+  // 창 제목에 지금 상태를 적어 둠 → 이 PC의 '발표화면 자동 전환' 도우미가 보고 발표자료를 띄우거나 내림
+  function winTitle() {
+    var el = document.querySelector('.kx-win');
+    if (!el) return;
+    var v = el.getAttribute('title') || 'S|', p = v.indexOf('P|') === 0;
+    var want = '[KX:' + (p ? 'P:' + v.slice(2) : 'S:') + ':] ' + (p ? v.slice(2) + ' 발표 중' : '스크린');
+    if (document.title !== want) document.title = want;
+  }
+  try { new MutationObserver(winTitle).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['title'] }); } catch (e) {}
+  // 자동 재생이 허용된 창(도우미가 연 스크린 창)이면 클릭 없이 소리를 켬
+  var triedAuto = false;
+  function autoUnlock() {
+    if (triedAuto || K.unlocked) return;
+    triedAuto = true;
+    if (!ensure()) return;
+    try { K.ctx.resume(); } catch (e) {}
+    setTimeout(function () { if (K.ctx && K.ctx.state === 'running' && !K.unlocked) { K.unlocked = true; K.cur.key = ''; K.last = null; pill(''); } }, 300);
+  }
   function tick() {
+    winTitle();
     var m = parse();
     if (!m) return;
+    autoUnlock();
     K.snd = m.snd; K.vol = m.vol;
     if (!m.snd) {
       if (K.ctx) { applyVol(); stopAll(0.5); }
